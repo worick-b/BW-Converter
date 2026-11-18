@@ -433,11 +433,17 @@ def main(page: ft.Page):
             except Exception:
                 pass
 
-    btn_salvar_preset = ft.Button(tr("save"), icon=ft.Icons.SAVE, on_click=salvar_preset_click)
-    btn_restaurar = ft.TextButton(tr("restore"), icon=ft.Icons.RESTORE, on_click=restaurar_presets_click)
-    btn_importar = ft.TextButton(tr("import"), icon=ft.Icons.UPLOAD_FILE, on_click=importar_presets_click)
-    btn_exportar = ft.TextButton(tr("export"), icon=ft.Icons.DOWNLOAD, on_click=exportar_presets_click)
-    btn_fechar_dlg = ft.TextButton(tr("close"), on_click=fechar_presets_dlg)
+    txt_btn_salvar = ft.Text(tr("save"))
+    txt_btn_restaurar = ft.Text(tr("restore"))
+    txt_btn_importar = ft.Text(tr("import"))
+    txt_btn_exportar = ft.Text(tr("export"))
+    txt_btn_fechar = ft.Text(tr("close"))
+
+    btn_salvar_preset = ft.Button(content=txt_btn_salvar, icon=ft.Icons.SAVE, on_click=salvar_preset_click)
+    btn_restaurar = ft.TextButton(content=txt_btn_restaurar, icon=ft.Icons.RESTORE, on_click=restaurar_presets_click)
+    btn_importar = ft.TextButton(content=txt_btn_importar, icon=ft.Icons.UPLOAD_FILE, on_click=importar_presets_click)
+    btn_exportar = ft.TextButton(content=txt_btn_exportar, icon=ft.Icons.DOWNLOAD, on_click=exportar_presets_click)
+    btn_fechar_dlg = ft.TextButton(content=txt_btn_fechar, on_click=fechar_presets_dlg)
     txt_dlg_title = ft.Text(tr("dlg_title"))
 
     dialog_presets = ft.AlertDialog(
@@ -455,22 +461,27 @@ def main(page: ft.Page):
         atualizar_lista_presets_ui()
         page.show_dialog(dialog_presets)
 
-    btn_pasta = ft.Button(tr("folder_btn"), icon=ft.Icons.FOLDER_OPEN, style=ft.ButtonStyle(bgcolor="#2B3240", color="#FFFFFF", shape=ft.RoundedRectangleBorder(radius=8)), on_click=mudar_pasta_click)
-    btn_pick = ft.Button(tr("pick_file"), icon=ft.Icons.AUDIO_FILE, style=ft.ButtonStyle(bgcolor="#232834", color="#E0E0E0", shape=ft.RoundedRectangleBorder(radius=8)), width=400, on_click=escolher_arquivo_click)
+    txt_btn_pasta = ft.Text(tr("folder_btn"))
+    txt_btn_pick = ft.Text(tr("pick_file"))
+    txt_btn_lang = ft.Text(estado["lang"].upper(), weight=ft.FontWeight.BOLD, color="#CE93D8")
+
+    btn_pasta = ft.Button(content=txt_btn_pasta, icon=ft.Icons.FOLDER_OPEN, style=ft.ButtonStyle(bgcolor="#2B3240", color="#FFFFFF", shape=ft.RoundedRectangleBorder(radius=8)), on_click=mudar_pasta_click)
+    btn_pick = ft.Button(content=txt_btn_pick, icon=ft.Icons.AUDIO_FILE, style=ft.ButtonStyle(bgcolor="#232834", color="#E0E0E0", shape=ft.RoundedRectangleBorder(radius=8)), width=400, on_click=escolher_arquivo_click)
     btn_manage = ft.IconButton(ft.Icons.TUNE, icon_color="#CE93D8", tooltip=tr("manage_tip"), on_click=abrir_presets_click)
     txt_start_btn = ft.Text(tr("start_btn"), size=14, weight=ft.FontWeight.BOLD, color="#FFFFFF")
 
     def alternar_idioma_click(e):
         estado["lang"] = "en" if estado["lang"] == "pt" else "pt"
-        btn_lang.text = estado["lang"].upper()
-        txt_subtitulo.value, txt_lbl_pasta.value, btn_pasta.text, btn_pick.text = tr("subtitle"), tr("work_folder"), tr("folder_btn"), tr("pick_file")
+        txt_btn_lang.value = estado["lang"].upper()
+        txt_subtitulo.value, txt_lbl_pasta.value = tr("subtitle"), tr("work_folder")
+        txt_btn_pasta.value, txt_btn_pick.value = tr("folder_btn"), tr("pick_file")
         dd_presets.label, btn_manage.tooltip, txt_start_btn.value, txt_status.value = tr("preset_lbl"), tr("manage_tip"), tr("start_btn"), tr("status_ready")
         txt_dlg_title.value, inp_nome.label, inp_ext.label, inp_args.label = tr("dlg_title"), tr("name_lbl"), tr("ext_lbl"), tr("args_lbl")
-        btn_salvar_preset.text, btn_restaurar.text, btn_importar.text, btn_exportar.text, btn_fechar_dlg.text = tr("save"), tr("restore"), tr("import"), tr("export"), tr("close")
+        txt_btn_salvar.value, txt_btn_restaurar.value, txt_btn_importar.value, txt_btn_exportar.value, txt_btn_fechar.value = tr("save"), tr("restore"), tr("import"), tr("export"), tr("close")
         txt_alvo.value = tr("mode_single", name=estado["arquivo_unico"].name) if estado["arquivo_unico"] else tr("mode_batch")
         page.update()
 
-    btn_lang = ft.TextButton(estado["lang"].upper(), on_click=alternar_idioma_click)
+    btn_lang = ft.TextButton(content=txt_btn_lang, on_click=alternar_idioma_click)
 
     card_pasta = ft.Container(bgcolor="#191B20", border=ft.Border.all(1, "#2C303A"), border_radius=10, padding=10, content=ft.Row([ft.Icon(ft.Icons.FOLDER_SPECIAL, color="#FFD54F", size=24), ft.Column([txt_lbl_pasta, txt_pasta], spacing=2, expand=True), btn_pasta], alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
     card_alvo = ft.Container(bgcolor="#191B20", border=ft.Border.all(1, "#2C303A"), border_radius=10, padding=10, content=ft.Column([ft.Row([txt_alvo, ft.IconButton(ft.Icons.CLEAR, icon_size=18, on_click=limpar_arquivo_click)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), btn_pick], spacing=6))
