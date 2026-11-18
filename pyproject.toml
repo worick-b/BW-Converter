@@ -21,7 +21,7 @@ dev = [
 
 [tool.flet]
 org = "com.abw.converter"
-product = "ABW-Converter"
+product = "ABW Converter"
 company = "ABW"
 copyright = "Copyright (C) 2026 by ABW"
 
