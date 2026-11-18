@@ -21,25 +21,41 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Baixar FFmpeg 8.1 para jniLibs nativo
+      - name: Gerar APKs base com Flet
+        run: |
+          flet build apk --arch arm64-v8a --arch armeabi-v7a --split-per-abi --compile-app --compile-packages --cleanup-app --cleanup-packages --yes
+
+      - name: Baixar e injetar FFmpeg 8.1 dentro dos APKs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p flutter/android/app/src/main/jniLibs/arm64-v8a
-          mkdir -p flutter/android/app/src/main/jniLibs/armeabi-v7a
           gh release download -R xonev8/FFmpeg-Android-HEAAC -p "*arm64-v8a*.zip" -O v8.zip
           gh release download -R xonev8/FFmpeg-Android-HEAAC -p "*armeabi-v7a*.zip" -O v7.zip
-          unzip -j -o v8.zip "libffmpeg_bin.so" -d flutter/android/app/src/main/jniLibs/arm64-v8a/
-          unzip -j -o v7.zip "libffmpeg_bin.so" -d flutter/android/app/src/main/jniLibs/armeabi-v7a/
-          rm -f v8.zip v7.zip
 
-      - name: Gerar APKs (arm64-v8a e armeabi-v7a)
-        run: |
-          flet build apk --arch arm64-v8a --arch armeabi-v7a --split-per-abi --yes
+          mkdir -p inj_v8/lib/arm64-v8a inj_v7/lib/armeabi-v7a
+          unzip -j -o v8.zip "libffmpeg_bin.so" -d inj_v8/lib/arm64-v8a/
+          unzip -j -o v7.zip "libffmpeg_bin.so" -d inj_v7/lib/armeabi-v7a/
+
+          BUILD_TOOLS=$(ls -d /usr/local/lib/android/sdk/build-tools/* | sort -V | tail -n 1)
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=ABW,O=ABW,C=BR"
+
+          for apk in build/apk/*arm64-v8a*.apk; do
+            (cd inj_v8 && zip -0 -r "$OLDPWD/$apk" lib/)
+            "$BUILD_TOOLS/zipalign" -f -p 4 "$apk" "${apk}.aligned"
+            "$BUILD_TOOLS/apksigner" sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out "$apk" "${apk}.aligned"
+            rm -f "${apk}.aligned"
+          done
+
+          for apk in build/apk/*armeabi-v7a*.apk; do
+            (cd inj_v7 && zip -0 -r "$OLDPWD/$apk" lib/)
+            "$BUILD_TOOLS/zipalign" -f -p 4 "$apk" "${apk}.aligned"
+            "$BUILD_TOOLS/apksigner" sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out "$apk" "${apk}.aligned"
+            rm -f "${apk}.aligned"
+          done
 
       - name: Publicar APKs na aba Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.1
-          name: ABW-Converter v1.0.1
+          tag_name: v1.0.2
+          name: ABW-Converter v1.0.2 (Android)
           files: build/apk/*.apk
