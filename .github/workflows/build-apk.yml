@@ -23,9 +23,9 @@ jobs:
 
       - name: Gerar APKs base com Flet
         run: |
-          flet build apk --arch arm64-v8a --arch armeabi-v7a --split-per-abi --compile-app --compile-packages --cleanup-app --cleanup-packages --yes
+          flet build apk --arch arm64-v8a --arch armeabi-v7a --split-per-abi --compile-app --compile-packages --yes
 
-      - name: Baixar e injetar FFmpeg 8.1 dentro dos APKs
+      - name: Ativar extractNativeLibs e injetar FFmpeg 8.1
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -56,6 +56,6 @@ jobs:
       - name: Publicar APKs na aba Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.2
-          name: ABW-Converter v1.0.2 (Android)
+          tag_name: v1.0.3
+          name: ABW-Converter v1.0.3 (Android)
           files: build/apk/*.apk
