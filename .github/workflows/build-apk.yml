@@ -35,7 +35,7 @@ jobs:
 
       - name: Gerar APKs (arm64-v8a e armeabi-v7a)
         run: |
-          flet build apk --arch arm64-v8a --arch armeabi-v7a --split-per-abi
+          flet build apk --arch arm64-v8a --arch armeabi-v7a --split-per-abi --yes
 
       - name: Disponibilizar APKs nos Artifacts
         uses: actions/upload-artifact@v5
