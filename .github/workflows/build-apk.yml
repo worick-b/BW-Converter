@@ -41,7 +41,7 @@ jobs:
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=ABW,O=ABW,C=BR"
 
           for apk in build/apk/*arm64-v8a*.apk; do
-            apktool d -f "$apk" -o tmp_apk
+            apktool d -r -s -f "$apk" -o tmp_apk
             sed -i 's/android:extractNativeLibs="false"/android:extractNativeLibs="true"/g' tmp_apk/AndroidManifest.xml
             mkdir -p tmp_apk/lib/arm64-v8a
             cp inj_v8/libffmpeg_bin.so tmp_apk/lib/arm64-v8a/
@@ -52,7 +52,7 @@ jobs:
           done
 
           for apk in build/apk/*armeabi-v7a*.apk; do
-            apktool d -f "$apk" -o tmp_apk
+            apktool d -r -s -f "$apk" -o tmp_apk
             sed -i 's/android:extractNativeLibs="false"/android:extractNativeLibs="true"/g' tmp_apk/AndroidManifest.xml
             mkdir -p tmp_apk/lib/armeabi-v7a
             cp inj_v7/libffmpeg_bin.so tmp_apk/lib/armeabi-v7a/
