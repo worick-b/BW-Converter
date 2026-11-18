@@ -28,6 +28,9 @@ copyright = "Copyright (C) 2026 by ABW"
 [tool.flet.app]
 path = "src"
 
+[tool.flet.android]
+extract_native_libs = true
+
 [tool.flet.android.permission]
 "android.permission.READ_EXTERNAL_STORAGE" = true
 "android.permission.WRITE_EXTERNAL_STORAGE" = true
