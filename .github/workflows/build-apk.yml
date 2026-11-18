@@ -21,15 +21,17 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Baixar FFmpeg 8.1 da última Release
+      - name: Baixar FFmpeg 8.1 da Release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p src/flutter/android/app/src/main/jniLibs/arm64-v8a
           mkdir -p src/flutter/android/app/src/main/jniLibs/armeabi-v7a
-          BASE="https://github.com"
-          wget -q "$BASE/FFmpeg-8.1-Android-arm64-v8a-HEAAC.zip"
-          wget -q "$BASE/FFmpeg-8.1-Android-armeabi-v7a-HEAAC.zip"
-          unzip -j -o FFmpeg-8.1-Android-arm64-v8a-HEAAC.zip "libffmpeg_bin.so" -d src/flutter/android/app/src/main/jniLibs/arm64-v8a/
-          unzip -j -o FFmpeg-8.1-Android-armeabi-v7a-HEAAC.zip "libffmpeg_bin.so" -d src/flutter/android/app/src/main/jniLibs/armeabi-v7a/
+          gh release download -R xonev8/FFmpeg-Android-HEAAC -p "*arm64-v8a*.zip" -O v8.zip
+          gh release download -R xonev8/FFmpeg-Android-HEAAC -p "*armeabi-v7a*.zip" -O v7.zip
+          unzip -j -o v8.zip "libffmpeg_bin.so" -d src/flutter/android/app/src/main/jniLibs/arm64-v8a/
+          unzip -j -o v7.zip "libffmpeg_bin.so" -d src/flutter/android/app/src/main/jniLibs/armeabi-v7a/
+          rm -f v8.zip v7.zip
 
       - name: Gerar APKs (arm64-v8a e armeabi-v7a)
         run: |
