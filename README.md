@@ -21,7 +21,7 @@ Lightweight, fast, and offline audio & video batch converter for Android powered
 | Preset Name | Output Format | FFmpeg Arguments |
 | :--- | :--- | :--- |
 | **Audio MP3 (192k)** | `.mp3` | `-vn -c:a libmp3lame -b:a 192k -ar 44100` |
-| **Audio HE-AAC v2 (39k)** | `.m4a` | `-vn -c:a libfdk_aac -profile:a aac_he_v2 -ac 2 -b:a 39k -ar 44100` |
+| **Audio HE-AAC v2 (39k)** | `.aac` | `-vn -c:a libfdk_aac -profile:a aac_he_v2 -ac 2 -b:a 39k -ar 44100` |
 | **Video MP4 H.264 (CRF 23)** | `.mp4` | `-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -c:a libfdk_aac -b:a 128k` |
 
 ---
