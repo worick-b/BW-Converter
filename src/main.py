@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import shlex
 import shutil
@@ -7,6 +8,7 @@ import threading
 import subprocess
 from pathlib import Path
 import flet as ft
+import flet_permission_handler as fph
 
 TEXTOS = {
     "en": {
@@ -27,7 +29,7 @@ TEXTOS = {
         "preparing": "Preparing FFmpeg...",
         "no_media": "[-] No files found to convert.",
         "starting": "[+] Starting {n} file(s) -> /convertido",
-        "converting": "Converting {i}/{t}: {name}",
+        "converting": "Converting {i}/{t}: {name} ({pct}%)",
         "done_item": "Done {i}/{t}",
         "failed_item": "  [!] Skipped/Failed {name}",
         "finished": "[✓] Finished: {ok}/{t} saved in /convertido",
@@ -45,7 +47,7 @@ TEXTOS = {
         "imported": "[✓] Imported {n} preset(s).",
         "restored": "[✓] Default presets restored.",
         "perm_title": "Storage Permission Required",
-        "perm_desc": "Allow 'All files access' so ABW-Converter can read Download and save converted files.",
+        "perm_desc": "Allow 'All files access' so ABW-Converter can read Download and save converted files.\n\n(Settings > Apps > ABW-Converter > All files access)",
         "open_settings": "Open Settings",
     },
     "pt": {
@@ -66,7 +68,7 @@ TEXTOS = {
         "preparing": "Preparando FFmpeg...",
         "no_media": "[-] Nenhum arquivo encontrado para converter.",
         "starting": "[+] Iniciando {n} arquivo(s) -> /convertido",
-        "converting": "Convertendo {i}/{t}: {name}",
+        "converting": "Convertendo {i}/{t}: {name} ({pct}%)",
         "done_item": "Concluído {i}/{t}",
         "failed_item": "  [!] Ignorado/Falha em {name}",
         "finished": "[✓] Finalizado: {ok}/{t} salvos em /convertido",
@@ -84,7 +86,7 @@ TEXTOS = {
         "imported": "[✓] {n} preset(s) importado(s).",
         "restored": "[✓] Presets padrão restaurados.",
         "perm_title": "Permissão de Arquivos Necessária",
-        "perm_desc": "Ative 'Acesso a todos os arquivos' para ler a pasta Download e salvar os convertidos.",
+        "perm_desc": "Ative 'Acesso a todos os arquivos' para ler a pasta Download e salvar os convertidos.\n\n(Configurações > Apps > ABW-Converter > Acesso a todos os arquivos)",
         "open_settings": "Abrir Configurações",
     },
 }
@@ -124,18 +126,8 @@ def salvar_config(dados: dict) -> None:
         pass
 
 
-def obter_pasta_abw() -> Path:
-    sdcard = Path("/storage/emulated/0")
-    base = (sdcard / "abw") if sdcard.exists() else (Path.home() / "abw")
-    try:
-        base.mkdir(parents=True, exist_ok=True)
-        return base
-    except Exception:
-        return obter_pasta_privada()
-
-
 def carregar_presets() -> list[dict]:
-    arq = obter_pasta_abw() / "presets.json"
+    arq = obter_pasta_privada() / "presets.json"
     if arq.exists():
         try:
             dados = json.loads(arq.read_text(encoding="utf-8"))
@@ -150,7 +142,7 @@ def carregar_presets() -> list[dict]:
 
 def salvar_presets(lista: list[dict]) -> None:
     try:
-        (obter_pasta_abw() / "presets.json").write_text(
+        (obter_pasta_privada() / "presets.json").write_text(
             json.dumps(lista, indent=2, ensure_ascii=False), encoding="utf-8"
         )
     except Exception:
@@ -191,6 +183,24 @@ def obter_caminho_ffmpeg() -> str | None:
             return str(pasta_src / nome)
 
     return shutil.which("ffmpeg")
+
+
+def obter_duracao_segundos(bin_ffmpeg: str, caminho_arquivo: str) -> float:
+    try:
+        res = subprocess.run(
+            [bin_ffmpeg, "-i", caminho_arquivo],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            errors="ignore",
+        )
+        m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", res.stderr or "")
+        if m:
+            h, mn, s = float(m.group(1)), float(m.group(2)), float(m.group(3))
+            return h * 3600 + mn * 60 + s
+    except Exception:
+        pass
+    return 0.0
 
 
 def detectar_idioma(page: ft.Page) -> str:
@@ -309,7 +319,8 @@ def main(page: ft.Page):
 
     def on_arquivo_result(e: ft.FilePickerResultEvent):
         if e.files:
-            estado["arquivo_unico"] = Path(e.files[0].path).resolve()
+            arq_escolhido = next(iter(e.files))
+            estado["arquivo_unico"] = Path(arq_escolhido.path).resolve()
             txt_alvo.value = tr("mode_single", name=estado["arquivo_unico"].name)
             txt_alvo.color = "#FFD54F"
             page.update()
@@ -317,7 +328,8 @@ def main(page: ft.Page):
     def on_importar_result(e: ft.FilePickerResultEvent):
         if e.files:
             try:
-                novos = json.loads(Path(e.files[0].path).read_text(encoding="utf-8"))
+                arq_json = next(iter(e.files))
+                novos = json.loads(Path(arq_json.path).read_text(encoding="utf-8"))
                 if isinstance(novos, list):
                     nomes_atuais = {p["nome"].strip().lower() for p in estado["presets"]}
                     adicionados = 0
@@ -340,7 +352,19 @@ def main(page: ft.Page):
     seletor_pasta = ft.FilePicker(on_result=on_pasta_result)
     seletor_arquivo = ft.FilePicker(on_result=on_arquivo_result)
     seletor_importar = ft.FilePicker(on_result=on_importar_result)
-    page.overlay.extend([seletor_pasta, seletor_arquivo, seletor_importar])
+    def on_exportar_result(e: ft.FilePickerResultEvent):
+        if e.path:
+            try:
+                destino = Path(e.path).resolve() / "abw_presets_exportados.json"
+                destino.write_text(json.dumps(estado["presets"], indent=2, ensure_ascii=False), encoding="utf-8")
+                fechar_presets_dlg()
+                log_msg(tr("exported", path=destino), "sucesso")
+            except Exception as ex:
+                log_msg(f"[-] {ex}", "erro")
+
+    seletor_exportar = ft.FilePicker(on_result=on_exportar_result)
+    perm_handler = fph.PermissionHandler()
+    page.overlay.extend([seletor_pasta, seletor_arquivo, seletor_importar, seletor_exportar, perm_handler])
 
     def mudar_pasta_click(e):
         if not estado["ocupado"]:
@@ -373,7 +397,10 @@ def main(page: ft.Page):
             log_msg(tr("no_ffmpeg"), "erro")
             return
 
-        preset = estado["presets"][int(dd_presets.value or 0)]
+        preset = next(
+            (p for idx, p in enumerate(estado["presets"]) if idx == int(dd_presets.value or 0)),
+            next(iter(estado["presets"])),
+        )
         ext_saida = preset.get("ext", ".mp4").strip()
         if not ext_saida.startswith("."):
             ext_saida = "." + ext_saida
@@ -384,12 +411,14 @@ def main(page: ft.Page):
         set_progresso(0, tr("preparing"))
 
         def worker():
+            arq_cache_limpar = None
             try:
+                pasta_base = estado["pasta"]
                 if estado["arquivo_unico"]:
                     arquivos = [estado["arquivo_unico"]]
-                    pasta_base = estado["arquivo_unico"].parent
+                    if "cache" in str(estado["arquivo_unico"]):
+                        arq_cache_limpar = estado["arquivo_unico"]
                 else:
-                    pasta_base = estado["pasta"]
                     exts_ignorar = {".json", ".txt", ".py", ".apk", ".zip", ".rar", ".7z", ".log", ".ini"}
                     arquivos = sorted(
                         [a for a in pasta_base.iterdir() if a.is_file() and a.suffix.lower() not in exts_ignorar],
@@ -411,7 +440,9 @@ def main(page: ft.Page):
 
                 ok_count = 0
                 for i, arq in enumerate(arquivos, 1):
-                    set_progresso((i - 1) / total, tr("converting", i=i, t=total, name=arq.name[:22]))
+                    nome_curto = arq.name if len(arq.name) <= 20 else arq.name[:17] + "..."
+                    set_progresso((i - 1) / total, tr("converting", i=i, t=total, name=nome_curto, pct=0))
+
                     destino_final = pasta_saida / f"{arq.stem}{ext_saida}"
                     destino_ascii = pasta_tmp / f"out_{i}{ext_saida}"
                     link_ascii = pasta_tmp / f"in_{i}{arq.suffix}"
@@ -425,13 +456,34 @@ def main(page: ft.Page):
                     except Exception:
                         entrada_cmd = str(arq)
 
-                    cmd = [bin_ffmpeg, "-y", "-v", "error", "-stats", "-i", entrada_cmd] + args_extras + [str(destino_ascii)]
-                    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="ignore")
-                    if proc.stderr:
-                        for linha in proc.stderr:
-                            t = linha.strip()
-                            if "time=" in t:
-                                set_progresso((i - 0.5) / total, f"[{i}/{total}] {t[:36]}")
+                    duracao_total = obter_duracao_segundos(bin_ffmpeg, entrada_cmd)
+
+                    cmd = [
+                        bin_ffmpeg, "-y", "-v", "error", "-nostats",
+                        "-progress", "pipe:1", "-i", entrada_cmd
+                    ] + args_extras + [str(destino_ascii)]
+
+                    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="ignore")
+                    ultimo_pct = -1
+
+                    if proc.stdout:
+                        for linha in proc.stdout:
+                            linha = linha.strip()
+                            if linha.startswith("out_time_us=") and duracao_total > 0:
+                                try:
+                                    us = int(linha.split("=", 1).pop())
+                                    seg_atual = us / 1_000_000.0
+                                    pct_item = max(0, min(99, int((seg_atual / duracao_total) * 100)))
+                                    if pct_item != ultimo_pct:
+                                        ultimo_pct = pct_item
+                                        prog_global = ((i - 1) + (pct_item / 100.0)) / total
+                                        set_progresso(
+                                            prog_global,
+                                            tr("converting", i=i, t=total, name=nome_curto, pct=pct_item),
+                                        )
+                                except Exception:
+                                    pass
+
                     proc.wait()
 
                     if link_ascii.exists() or link_ascii.is_symlink():
@@ -458,6 +510,12 @@ def main(page: ft.Page):
                     pasta_tmp.rmdir()
                 except Exception:
                     pass
+
+                if arq_cache_limpar and arq_cache_limpar.exists():
+                    try:
+                        arq_cache_limpar.unlink()
+                    except Exception:
+                        pass
 
                 log_msg(tr("finished", ok=ok_count, t=total), "sucesso")
             except Exception as ex:
@@ -517,10 +575,11 @@ def main(page: ft.Page):
         page.update()
 
     def editar_preset_click(idx: int):
-        p = estado["presets"][idx]
-        estado["editando_idx"] = idx
-        inp_nome.value, inp_ext.value, inp_args.value = p["nome"], p["ext"], p["args"]
-        page.update()
+        p = next((item for i, item in enumerate(estado["presets"]) if i == idx), None)
+        if p:
+            estado["editando_idx"] = idx
+            inp_nome.value, inp_ext.value, inp_args.value = p["nome"], p["ext"], p["args"]
+            page.update()
 
     def apagar_preset_click(idx: int):
         if len(estado["presets"]) <= 1:
@@ -539,7 +598,8 @@ def main(page: ft.Page):
             ext = "." + ext
         item = {"nome": nome, "ext": ext, "args": args}
         if estado["editando_idx"] is not None:
-            estado["presets"][estado["editando_idx"]] = item
+            idx_ed = estado["editando_idx"]
+            estado["presets"] = [item if i == idx_ed else p for i, p in enumerate(estado["presets"])]
             estado["editando_idx"] = None
         else:
             estado["presets"].append(item)
@@ -557,17 +617,17 @@ def main(page: ft.Page):
         log_msg(tr("restored"), "sucesso")
 
     def exportar_presets_click(e):
-        destino = obter_pasta_abw() / "abw_presets_exportados.json"
-        destino.write_text(json.dumps(estado["presets"], indent=2, ensure_ascii=False), encoding="utf-8")
-        fechar_presets_dlg()
-        log_msg(tr("exported", path=destino), "sucesso")
+        seletor_exportar.get_directory_path(
+            initial_directory=str(estado["pasta"]) if estado["pasta"].exists() else None
+        )
 
     def importar_presets_click(e):
         seletor_importar.pick_files(
             allow_multiple=False,
             allowed_extensions=["json"],
-            initial_directory=str(obter_pasta_abw()),
+            initial_directory=str(estado["pasta"]) if estado["pasta"].exists() else None,
         )
+
 
     btn_salvar_preset = ft.ElevatedButton(text=tr("save"), icon=ft.Icons.SAVE, on_click=salvar_preset_click)
     btn_restaurar = ft.TextButton(text=tr("restore"), icon=ft.Icons.RESTORE, on_click=restaurar_presets_click)
@@ -657,6 +717,11 @@ def main(page: ft.Page):
         btn_importar.text = tr("import")
         btn_exportar.text = tr("export")
         btn_fechar_dlg.text = tr("close")
+
+        txt_perm_title.value = tr("perm_title")
+        txt_perm_desc.value = tr("perm_desc")
+        btn_perm_close.text = tr("close")
+        btn_perm_settings.text = tr("open_settings")
 
         txt_alvo.value = (
             tr("mode_single", name=estado["arquivo_unico"].name)
@@ -757,34 +822,32 @@ def main(page: ft.Page):
     def solicitar_permissao_sistema(e):
         page.close(dlg_perm)
         try:
-            perm_handler.request_permission(ft.PermissionType.MANAGE_EXTERNAL_STORAGE)
+            perm_handler.request_permission(fph.PermissionType.MANAGE_EXTERNAL_STORAGE)
         except Exception:
             perm_handler.open_app_settings()
 
+    txt_perm_title = ft.Text(tr("perm_title"))
+    txt_perm_desc = ft.Text(tr("perm_desc"), size=13)
+    btn_perm_close = ft.TextButton(text=tr("close"), on_click=lambda e: page.close(dlg_perm))
+    btn_perm_settings = ft.ElevatedButton(text=tr("open_settings"), on_click=solicitar_permissao_sistema)
+
     dlg_perm = ft.AlertDialog(
         modal=True,
-        title=ft.Text(tr("perm_title")),
-        content=ft.Text(
-            tr("perm_desc") + "\n\n(Configurações > Apps > ABW-Converter > Acesso a todos os arquivos)",
-            size=13,
-        ),
-        actions=[
-            ft.ElevatedButton(text="OK", on_click=lambda e: page.close(dlg_perm)),
-        ],
+        title=txt_perm_title,
+        content=txt_perm_desc,
+        actions=[btn_perm_close, btn_perm_settings],
     )
 
     def verificar_permissao_android():
-        sdcard = Path("/storage/emulated/0")
-        if not sdcard.exists():
-            return
-        try:
-            pasta_teste = sdcard / "abw"
-            pasta_teste.mkdir(parents=True, exist_ok=True)
-            arq_teste = pasta_teste / ".perm_check"
-            arq_teste.write_text("ok", encoding="utf-8")
-            arq_teste.unlink()
-        except Exception:
-            page.open(dlg_perm)
+      pasta_teste = Path("/storage/emulated/0/Download")
+      if not pasta_teste.exists():
+          return
+      try:
+          arq_teste = pasta_teste / ".abw_perm_check"
+          arq_teste.write_text("ok", encoding="utf-8")
+          arq_teste.unlink()
+      except Exception:
+          page.open(dlg_perm)
 
     verificar_permissao_android()
     log_msg(f"[✓] {tr('ready')}", "sucesso")
