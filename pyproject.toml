@@ -12,3 +12,6 @@ dependencies = [
 [tool.flet]
 org = "com.abw.converter"
 product = "ABW-Converter"
+
+[tool.flet.app]
+source_dir = "src"
