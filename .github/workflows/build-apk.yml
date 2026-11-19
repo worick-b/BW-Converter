@@ -48,7 +48,7 @@ jobs:
           cat << 'EOF' > patch_axml.py
           import sys, struct
 
-          filepath = sys.argv[1]
+          _, filepath = sys.argv
           data = bytearray(open(filepath, "rb").read())
           res_id = struct.pack("<I", 0x010104ea)
           idx = data.find(res_id)
@@ -56,14 +56,14 @@ jobs:
           if idx != -1:
               pos = data.find(b"\x02\x01\x10\x00")
               while pos != -1 and pos + 36 < len(data):
-                  attr_count = struct.unpack_from("<H", data, pos + 28)[0]
+                  attr_count, = struct.unpack_from("<H", data, pos + 28)
                   attr_off = pos + 36
                   for i in range(attr_count):
                       entry = attr_off + i * 20
                       if entry + 20 <= len(data):
-                          name_idx = struct.unpack_from("<I", data, entry + 4)[0]
+                          name_idx, = struct.unpack_from("<I", data, entry + 4)
                           val_type = data[entry + 15]
-                          val_data = struct.unpack_from("<I", data, entry + 16)[0]
+                          val_data, = struct.unpack_from("<I", data, entry + 16)
                           if val_type == 0x12 and val_data == 0:
                               id_pos = idx - name_idx * 4
                               if id_pos >= 0 and data[id_pos:id_pos+4] == res_id:
@@ -81,7 +81,7 @@ jobs:
             dir="${pair##*:}"
             unzip -o "$apk" AndroidManifest.xml -d "$dir/"
             python patch_axml.py "$dir/AndroidManifest.xml"
-            (cd "$dir" && zip -0 -r "$OLDPWD/$apk" AndroidManifest.xml lib/)
+            (cd "$dir" && zip -9 -r "$OLDPWD/$apk" AndroidManifest.xml lib/)
             "$BUILD_TOOLS/zipalign" -f -p 4 "$apk" "${apk}.aligned"
             "$BUILD_TOOLS/apksigner" sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out "$apk" "${apk}.aligned"
             rm -f "${apk}.aligned" "$dir/AndroidManifest.xml"
@@ -90,6 +90,6 @@ jobs:
       - name: Publicar APKs na aba Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1.6
-          name: ABW-Converter v1.1.6
+          tag_name: v1.1.8
+          name: ABW-Converter v1.1.8
           files: out_apks/*.apk
