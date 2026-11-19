@@ -21,35 +21,24 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Gerar APKs base com Flet
-        run: |
-          flet build apk --arch arm64-v8a --arch armeabi-v7a --split-per-abi --compile-app --compile-packages --yes
-
-      - name: Ativar extractNativeLibs e injetar FFmpeg 8.1
+      - name: Preparar projeto Android com Flet e injetar FFmpeg 8.1
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sudo apt-get update && sudo apt-get install -y apktool
+          flet build apk --arch arm64-v8a --arch armeabi-v7a --split-per-abi --compile-app --compile-packages --yes
+
           gh release download -R xonev8/FFmpeg-Android-HEAAC -p "*arm64-v8a*.zip" -O v8.zip
           gh release download -R xonev8/FFmpeg-Android-HEAAC -p "*armeabi-v7a*.zip" -O v7.zip
 
-          mkdir -p inj_v8 inj_v7
-          unzip -j -o v8.zip "libffmpeg_bin.so" -d inj_v8/
-          unzip -j -o v7.zip "libffmpeg_bin.so" -d inj_v7/
+          mkdir -p build/flutter/android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p build/flutter/android/app/src/main/jniLibs/armeabi-v7a
+          unzip -j -o v8.zip "libffmpeg_bin.so" -d build/flutter/android/app/src/main/jniLibs/arm64-v8a/
+          unzip -j -o v7.zip "libffmpeg_bin.so" -d build/flutter/android/app/src/main/jniLibs/armeabi-v7a/
 
-          BUILD_TOOLS=$(ls -d /usr/local/lib/android/sdk/build-tools/* | sort -V | tail -n 1)
-          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=ABW,O=ABW,C=BR"
+          sed -i 's/<application/<application android:extractNativeLibs="true"/g' build/flutter/android/app/src/main/AndroidManifest.xml
 
-          for apk in build/apk/*arm64-v8a*.apk; do
-            apktool d -r -s -f "$apk" -o tmp_apk
-            sed -i 's/android:extractNativeLibs="false"/android:extractNativeLibs="true"/g' tmp_apk/AndroidManifest.xml
-            mkdir -p tmp_apk/lib/arm64-v8a
-            cp inj_v8/libffmpeg_bin.so tmp_apk/lib/arm64-v8a/
-            apktool b tmp_apk -o "${apk}.unaligned"
-            "$BUILD_TOOLS/zipalign" -f -p 4 "${apk}.unaligned" "$apk"
-            "$BUILD_TOOLS/apksigner" sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out "$apk" "$apk"
-            rm -rf tmp_apk "${apk}.unaligned"
-          done
+          cd build/flutter && flutter build apk --release --split-per-abi
+          cp build/app/outputs/flutter-apk/*.apk "$GITHUB_WORKSPACE/build/apk/"
 
           for apk in build/apk/*armeabi-v7a*.apk; do
             apktool d -r -s -f "$apk" -o tmp_apk
