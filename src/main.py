@@ -19,6 +19,7 @@ TEXTOS = {
         "preset_lbl": "Active Preset",
         "manage_tip": "Manage Presets",
         "start_btn": "START CONVERSION",
+        "running_btn": "CONVERTING...",
         "ready": "Ready. Output saved to /convertido",
         "status_ready": "Ready to convert.",
         "wait": "[!] Wait for the current task to finish.",
@@ -41,9 +42,11 @@ TEXTOS = {
         "export": "Export",
         "close": "Close",
         "exported": "[✓] Exported to: {path}",
+        "imported": "[✓] Imported {n} preset(s).",
         "restored": "[✓] Default presets restored.",
         "perm_title": "Storage Permission Required",
         "perm_desc": "Allow 'All files access' so ABW-Converter can read Download and save converted files.",
+        "open_settings": "Open Settings",
     },
     "pt": {
         "subtitle": "Motor FFmpeg 8.1",
@@ -55,6 +58,7 @@ TEXTOS = {
         "preset_lbl": "Preset Ativo",
         "manage_tip": "Gerenciar Presets",
         "start_btn": "INICIAR CONVERSÃO",
+        "running_btn": "CONVERTENDO...",
         "ready": "Pronto. Saída automática em /convertido",
         "status_ready": "Pronto para converter.",
         "wait": "[!] Aguarde a conversão atual terminar.",
@@ -77,10 +81,12 @@ TEXTOS = {
         "export": "Exportar",
         "close": "Fechar",
         "exported": "[✓] Exportado para: {path}",
+        "imported": "[✓] {n} preset(s) importado(s).",
         "restored": "[✓] Presets padrão restaurados.",
         "perm_title": "Permissão de Arquivos Necessária",
         "perm_desc": "Ative 'Acesso a todos os arquivos' para ler a pasta Download e salvar os convertidos.",
-    }
+        "open_settings": "Abrir Configurações",
+    },
 }
 
 PRESETS_INICIAIS = [
@@ -144,7 +150,9 @@ def carregar_presets() -> list[dict]:
 
 def salvar_presets(lista: list[dict]) -> None:
     try:
-        (obter_pasta_abw() / "presets.json").write_text(json.dumps(lista, indent=2, ensure_ascii=False), encoding="utf-8")
+        (obter_pasta_abw() / "presets.json").write_text(
+            json.dumps(lista, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
     except Exception:
         pass
 
@@ -158,11 +166,13 @@ def obter_caminho_ffmpeg() -> str | None:
             for p in linha.split():
                 if p.startswith("/") and (".so" in p or ".apk" in p):
                     base_dir = Path(p).parent
-                    pastas_busca.add(base_dir)
-                    pastas_busca.add(base_dir / "lib" / "arm64")
-                    pastas_busca.add(base_dir / "lib" / "arm64-v8a")
-                    pastas_busca.add(base_dir / "lib" / "arm")
-                    pastas_busca.add(base_dir / "lib" / "armeabi-v7a")
+                    pastas_busca.update([
+                        base_dir,
+                        base_dir / "lib" / "arm64",
+                        base_dir / "lib" / "arm64-v8a",
+                        base_dir / "lib" / "arm",
+                        base_dir / "lib" / "armeabi-v7a",
+                    ])
     except Exception:
         pass
 
@@ -226,6 +236,7 @@ def main(page: ft.Page):
         txt = TEXTOS[estado["lang"]].get(chave, chave)
         return txt.format(**kwargs) if kwargs else txt
 
+    # --- Controles Principais ---
     txt_subtitulo = ft.Text(tr("subtitle"), size=12, color="#78909C")
     txt_lbl_pasta = ft.Text(tr("work_folder"), size=11, color="#90A4AE")
     txt_pasta = ft.Text(
@@ -236,11 +247,19 @@ def main(page: ft.Page):
         max_lines=2,
         overflow=ft.TextOverflow.ELLIPSIS,
     )
-    txt_alvo = ft.Text(tr("mode_batch"), size=12, color="#81C784", weight=ft.FontWeight.W_600)
+    txt_alvo = ft.Text(
+        tr("mode_batch"),
+        size=12,
+        color="#81C784",
+        weight=ft.FontWeight.W_600,
+        expand=True,
+        max_lines=1,
+        overflow=ft.TextOverflow.ELLIPSIS,
+    )
     txt_status = ft.Text(tr("status_ready"), size=12, color="#B0BEC5")
-    barra_progresso = ft.ProgressBar(value=0, color="#AB47BC", bgcolor="#262930", height=6)
+    barra_progresso = ft.ProgressBar(value=0, color="#AB47BC", bgcolor="#262930", height=6, border_radius=4)
     lista_logs = ft.ListView(expand=True, spacing=3, auto_scroll=True)
-    dd_presets = ft.Dropdown(label=tr("preset_lbl"), expand=True)
+    dd_presets = ft.Dropdown(label=tr("preset_lbl"), expand=True, text_size=13, border_color="#2C303A")
 
     def recarregar_dropdown(selecionar_idx: int = 0):
         estado["presets"] = carregar_presets()
@@ -270,6 +289,17 @@ def main(page: ft.Page):
         txt_status.value = texto
         page.update()
 
+    def atualizar_estado_ocupado(ocupado: bool):
+        estado["ocupado"] = ocupado
+        btn_converter.disabled = ocupado
+        btn_pasta.disabled = ocupado
+        btn_pick.disabled = ocupado
+        btn_manage.disabled = ocupado
+        dd_presets.disabled = ocupado
+        txt_start_btn.value = tr("running_btn") if ocupado else tr("start_btn")
+        page.update()
+
+    # --- FilePickers ---
     def on_pasta_result(e: ft.FilePickerResultEvent):
         if e.path:
             estado["pasta"] = Path(e.path).resolve()
@@ -303,13 +333,15 @@ def main(page: ft.Page):
                     if adicionados > 0:
                         salvar_presets(estado["presets"])
                         atualizar_lista_presets_ui()
-            except Exception:
-                pass
+                        log_msg(tr("imported", n=adicionados), "sucesso")
+            except Exception as ex:
+                log_msg(f"[-] {ex}", "erro")
 
     seletor_pasta = ft.FilePicker(on_result=on_pasta_result)
     seletor_arquivo = ft.FilePicker(on_result=on_arquivo_result)
     seletor_importar = ft.FilePicker(on_result=on_importar_result)
-    page.overlay.extend([seletor_pasta, seletor_arquivo, seletor_importar])
+    perm_handler = ft.PermissionHandler()
+    page.overlay.extend([seletor_pasta, seletor_arquivo, seletor_importar, perm_handler])
 
     def mudar_pasta_click(e):
         if not estado["ocupado"]:
@@ -325,11 +357,13 @@ def main(page: ft.Page):
             )
 
     def limpar_arquivo_click(e):
-        estado["arquivo_unico"] = None
-        txt_alvo.value = tr("mode_batch")
-        txt_alvo.color = "#81C784"
-        page.update()
+        if not estado["ocupado"]:
+            estado["arquivo_unico"] = None
+            txt_alvo.value = tr("mode_batch")
+            txt_alvo.color = "#81C784"
+            page.update()
 
+    # --- Motor de Conversão FFmpeg ---
     def iniciar_conversao_click(e):
         if estado["ocupado"]:
             log_msg(tr("wait"), "aviso")
@@ -346,7 +380,7 @@ def main(page: ft.Page):
             ext_saida = "." + ext_saida
         args_extras = shlex.split(preset.get("args", ""))
 
-        estado["ocupado"] = True
+        atualizar_estado_ocupado(True)
         lista_logs.controls.clear()
         set_progresso(0, tr("preparing"))
 
@@ -358,10 +392,10 @@ def main(page: ft.Page):
                 else:
                     pasta_base = estado["pasta"]
                     exts_ignorar = {".json", ".txt", ".py", ".apk", ".zip", ".rar", ".7z", ".log", ".ini"}
-                    arquivos = [
-                        a for a in pasta_base.iterdir()
-                        if a.is_file() and a.suffix.lower() not in exts_ignorar
-                    ]
+                    arquivos = sorted(
+                        [a for a in pasta_base.iterdir() if a.is_file() and a.suffix.lower() not in exts_ignorar],
+                        key=lambda x: x.name.lower(),
+                    )
 
                 total = len(arquivos)
                 if total == 0:
@@ -378,7 +412,7 @@ def main(page: ft.Page):
 
                 ok_count = 0
                 for i, arq in enumerate(arquivos, 1):
-                    set_progresso((i - 1) / total, tr("converting", i=i, t=total, name=arq.name[:18]))
+                    set_progresso((i - 1) / total, tr("converting", i=i, t=total, name=arq.name[:22]))
                     destino_final = pasta_saida / f"{arq.stem}{ext_saida}"
                     destino_ascii = pasta_tmp / f"out_{i}{ext_saida}"
                     link_ascii = pasta_tmp / f"in_{i}{arq.suffix}"
@@ -430,14 +464,15 @@ def main(page: ft.Page):
             except Exception as ex:
                 log_msg(f"[-] {ex}", "erro")
             finally:
-                estado["ocupado"] = False
+                atualizar_estado_ocupado(False)
                 set_progresso(1.0, tr("status_ready"))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    inp_nome = ft.TextField(label=tr("name_lbl"), dense=True)
-    inp_ext = ft.TextField(label=tr("ext_lbl"), dense=True)
-    inp_args = ft.TextField(label=tr("args_lbl"), multiline=True, min_lines=2, max_lines=3, dense=True)
+    # --- Gerenciador de Presets (AlertDialog) ---
+    inp_nome = ft.TextField(label=tr("name_lbl"), dense=True, text_size=13)
+    inp_ext = ft.TextField(label=tr("ext_lbl"), dense=True, text_size=13)
+    inp_args = ft.TextField(label=tr("args_lbl"), multiline=True, min_lines=2, max_lines=3, dense=True, text_size=12)
     col_lista_presets = ft.Column(spacing=6, scroll=ft.ScrollMode.AUTO, height=160)
 
     def fechar_presets_dlg(e=None):
@@ -463,8 +498,18 @@ def main(page: ft.Page):
                                 spacing=2,
                                 expand=True,
                             ),
-                            ft.IconButton(ft.Icons.EDIT, icon_size=18, icon_color="#64B5F6", on_click=lambda _, idx=i: editar_preset_click(idx)),
-                            ft.IconButton(ft.Icons.DELETE, icon_size=18, icon_color="#E57373", on_click=lambda _, idx=i: apagar_preset_click(idx)),
+                            ft.IconButton(
+                                icon=ft.Icons.EDIT,
+                                icon_size=18,
+                                icon_color="#64B5F6",
+                                on_click=lambda _, idx=i: editar_preset_click(idx),
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.DELETE,
+                                icon_size=18,
+                                icon_color="#E57373",
+                                on_click=lambda _, idx=i: apagar_preset_click(idx),
+                            ),
                         ],
                         spacing=2,
                     ),
@@ -486,7 +531,9 @@ def main(page: ft.Page):
         atualizar_lista_presets_ui()
 
     def salvar_preset_click(e):
-        nome, ext, args = (inp_nome.value or "").strip(), (inp_ext.value or "").strip(), (inp_args.value or "").strip()
+        nome = (inp_nome.value or "").strip()
+        ext = (inp_ext.value or "").strip()
+        args = (inp_args.value or "").strip()
         if not nome or not ext or not args:
             return
         if not ext.startswith("."):
@@ -523,18 +570,12 @@ def main(page: ft.Page):
             initial_directory=str(obter_pasta_abw()),
         )
 
-    txt_btn_salvar = ft.Text(tr("save"))
-    txt_btn_restaurar = ft.Text(tr("restore"))
-    txt_btn_importar = ft.Text(tr("import"))
-    txt_btn_exportar = ft.Text(tr("export"))
-    txt_btn_fechar = ft.Text(tr("close"))
-
-    btn_salvar_preset = ft.ElevatedButton(content=txt_btn_salvar, icon=ft.Icons.SAVE, on_click=salvar_preset_click)
-    btn_restaurar = ft.TextButton(content=txt_btn_restaurar, icon=ft.Icons.RESTORE, on_click=restaurar_presets_click)
-    btn_importar = ft.TextButton(content=txt_btn_importar, icon=ft.Icons.UPLOAD_FILE, on_click=importar_presets_click)
-    btn_exportar = ft.TextButton(content=txt_btn_exportar, icon=ft.Icons.DOWNLOAD, on_click=exportar_presets_click)
-    btn_fechar_dlg = ft.TextButton(content=txt_btn_fechar, on_click=fechar_presets_dlg)
-    txt_dlg_title = ft.Text(tr("dlg_title"))
+    btn_salvar_preset = ft.ElevatedButton(text=tr("save"), icon=ft.Icons.SAVE, on_click=salvar_preset_click)
+    btn_restaurar = ft.TextButton(text=tr("restore"), icon=ft.Icons.RESTORE, on_click=restaurar_presets_click)
+    btn_importar = ft.TextButton(text=tr("import"), icon=ft.Icons.UPLOAD_FILE, on_click=importar_presets_click)
+    btn_exportar = ft.TextButton(text=tr("export"), icon=ft.Icons.DOWNLOAD, on_click=exportar_presets_click)
+    btn_fechar_dlg = ft.TextButton(text=tr("close"), on_click=fechar_presets_dlg)
+    txt_dlg_title = ft.Text(tr("dlg_title"), size=16, weight=ft.FontWeight.BOLD)
 
     dialog_presets = ft.AlertDialog(
         modal=True,
@@ -542,15 +583,15 @@ def main(page: ft.Page):
         content=ft.Column(
             [
                 col_lista_presets,
-                ft.Divider(),
+                ft.Divider(height=10, color="#2C303A"),
                 inp_nome,
                 inp_ext,
                 inp_args,
-                ft.Row([btn_salvar_preset, btn_restaurar, btn_importar, btn_exportar], wrap=True),
+                ft.Row([btn_salvar_preset, btn_restaurar, btn_importar, btn_exportar], wrap=True, spacing=4),
             ],
             tight=True,
-            width=310,
-            spacing=6,
+            width=320,
+            spacing=8,
         ),
         actions=[btn_fechar_dlg],
     )
@@ -564,56 +605,74 @@ def main(page: ft.Page):
         atualizar_lista_presets_ui()
         page.open(dialog_presets)
 
-    txt_btn_pasta = ft.Text(tr("folder_btn"))
-    txt_btn_pick = ft.Text(tr("pick_file"))
-    txt_btn_lang = ft.Text(estado["lang"].upper(), weight=ft.FontWeight.BOLD, color="#CE93D8")
-
+    # --- Botões da Tela Principal ---
     btn_pasta = ft.ElevatedButton(
-        content=txt_btn_pasta,
+        text=tr("folder_btn"),
         icon=ft.Icons.FOLDER_OPEN,
-        style=ft.ButtonStyle(bgcolor="#2B3240", color="#FFFFFF", shape=ft.RoundedRectangleBorder(radius=8)),
+        style=ft.ButtonStyle(
+            bgcolor="#2B3240",
+            color="#FFFFFF",
+            shape=ft.RoundedRectangleBorder(radius=8),
+        ),
         on_click=mudar_pasta_click,
     )
     btn_pick = ft.ElevatedButton(
-        content=txt_btn_pick,
+        text=tr("pick_file"),
         icon=ft.Icons.AUDIO_FILE,
-        style=ft.ButtonStyle(bgcolor="#232834", color="#E0E0E0", shape=ft.RoundedRectangleBorder(radius=8)),
-        width=400,
+        style=ft.ButtonStyle(
+            bgcolor="#232834",
+            color="#E0E0E0",
+            shape=ft.RoundedRectangleBorder(radius=8),
+        ),
+        expand=True,
         on_click=escolher_arquivo_click,
     )
-    btn_manage = ft.IconButton(ft.Icons.TUNE, icon_color="#CE93D8", tooltip=tr("manage_tip"), on_click=abrir_presets_click)
+    btn_manage = ft.IconButton(
+        icon=ft.Icons.TUNE,
+        icon_color="#CE93D8",
+        tooltip=tr("manage_tip"),
+        on_click=abrir_presets_click,
+    )
     txt_start_btn = ft.Text(tr("start_btn"), size=14, weight=ft.FontWeight.BOLD, color="#FFFFFF")
 
     def alternar_idioma_click(e):
         estado["lang"] = "en" if estado["lang"] == "pt" else "pt"
         salvar_config({"lang": estado["lang"]})
-        txt_btn_lang.value = estado["lang"].upper()
-        txt_subtitulo.value, txt_lbl_pasta.value = tr("subtitle"), tr("work_folder")
-        txt_btn_pasta.value, txt_btn_pick.value = tr("folder_btn"), tr("pick_file")
-        dd_presets.label, btn_manage.tooltip, txt_start_btn.value, txt_status.value = (
-            tr("preset_lbl"),
-            tr("manage_tip"),
-            tr("start_btn"),
-            tr("status_ready"),
+
+        btn_lang.text = estado["lang"].upper()
+        txt_subtitulo.value = tr("subtitle")
+        txt_lbl_pasta.value = tr("work_folder")
+        btn_pasta.text = tr("folder_btn")
+        btn_pick.text = tr("pick_file")
+        dd_presets.label = tr("preset_lbl")
+        btn_manage.tooltip = tr("manage_tip")
+        txt_start_btn.value = tr("running_btn") if estado["ocupado"] else tr("start_btn")
+        txt_status.value = tr("status_ready")
+
+        txt_dlg_title.value = tr("dlg_title")
+        inp_nome.label = tr("name_lbl")
+        inp_ext.label = tr("ext_lbl")
+        inp_args.label = tr("args_lbl")
+        btn_salvar_preset.text = tr("save")
+        btn_restaurar.text = tr("restore")
+        btn_importar.text = tr("import")
+        btn_exportar.text = tr("export")
+        btn_fechar_dlg.text = tr("close")
+
+        txt_alvo.value = (
+            tr("mode_single", name=estado["arquivo_unico"].name)
+            if estado["arquivo_unico"]
+            else tr("mode_batch")
         )
-        txt_dlg_title.value, inp_nome.label, inp_ext.label, inp_args.label = (
-            tr("dlg_title"),
-            tr("name_lbl"),
-            tr("ext_lbl"),
-            tr("args_lbl"),
-        )
-        txt_btn_salvar.value, txt_btn_restaurar.value, txt_btn_importar.value, txt_btn_exportar.value, txt_btn_fechar.value = (
-            tr("save"),
-            tr("restore"),
-            tr("import"),
-            tr("export"),
-            tr("close"),
-        )
-        txt_alvo.value = tr("mode_single", name=estado["arquivo_unico"].name) if estado["arquivo_unico"] else tr("mode_batch")
         page.update()
 
-    btn_lang = ft.TextButton(content=txt_btn_lang, on_click=alternar_idioma_click)
+    btn_lang = ft.TextButton(
+        text=estado["lang"].upper(),
+        style=ft.ButtonStyle(color="#CE93D8"),
+        on_click=alternar_idioma_click,
+    )
 
+    # --- Cartões e Layout ---
     card_pasta = ft.Container(
         bgcolor="#191B20",
         border=ft.border.all(1, "#2C303A"),
@@ -628,6 +687,7 @@ def main(page: ft.Page):
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         ),
     )
+
     card_alvo = ft.Container(
         bgcolor="#191B20",
         border=ft.border.all(1, "#2C303A"),
@@ -635,12 +695,19 @@ def main(page: ft.Page):
         padding=10,
         content=ft.Column(
             [
-                ft.Row([txt_alvo, ft.IconButton(ft.Icons.CLEAR, icon_size=18, on_click=limpar_arquivo_click)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                btn_pick,
+                ft.Row(
+                    [
+                        txt_alvo,
+                        ft.IconButton(icon=ft.Icons.CLEAR, icon_size=18, on_click=limpar_arquivo_click),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+                ft.Row([btn_pick]),
             ],
             spacing=6,
         ),
     )
+
     card_preset = ft.Container(
         bgcolor="#191B20",
         border=ft.border.all(1, "#2C303A"),
@@ -648,22 +715,64 @@ def main(page: ft.Page):
         padding=10,
         content=ft.Row([dd_presets, btn_manage], spacing=6),
     )
+
     btn_converter = ft.ElevatedButton(
-        content=ft.Row([ft.Icon(ft.Icons.PLAY_ARROW_ROUNDED, size=22, color="#FFFFFF"), txt_start_btn], alignment=ft.MainAxisAlignment.CENTER),
-        style=ft.ButtonStyle(bgcolor="#7B1FA2", shape=ft.RoundedRectangleBorder(radius=10), padding=ft.padding.symmetric(vertical=14)),
-        width=400,
+        content=ft.Row(
+            [ft.Icon(ft.Icons.PLAY_ARROW_ROUNDED, size=22, color="#FFFFFF"), txt_start_btn],
+            alignment=ft.MainAxisAlignment.CENTER,
+        ),
+        style=ft.ButtonStyle(
+            bgcolor="#7B1FA2",
+            shape=ft.RoundedRectangleBorder(radius=10),
+            padding=ft.padding.symmetric(vertical=14),
+        ),
         on_click=iniciar_conversao_click,
     )
-    card_logs = ft.Container(bgcolor="#0D0E11", border=ft.border.all(1, "#262930"), border_radius=10, padding=10, expand=True, content=lista_logs)
+
+    card_logs = ft.Container(
+        bgcolor="#0D0E11",
+        border=ft.border.all(1, "#262930"),
+        border_radius=10,
+        padding=10,
+        expand=True,
+        content=lista_logs,
+    )
 
     page.add(
-        ft.Row([ft.Text("ABW-Converter", size=18, weight=ft.FontWeight.BOLD, color="#CE93D8"), ft.Row([txt_subtitulo, btn_lang], spacing=4)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+        ft.Row(
+            [
+                ft.Text("ABW-Converter", size=18, weight=ft.FontWeight.BOLD, color="#CE93D8"),
+                ft.Row([txt_subtitulo, btn_lang], spacing=4),
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+        ),
         card_pasta,
         card_alvo,
         card_preset,
-        btn_converter,
+        ft.Row([ft.Container(content=btn_converter, expand=True)]),
         ft.Column([txt_status, barra_progresso], spacing=4),
         card_logs,
+    )
+
+    # --- Verificação de Permissão Android ---
+    def solicitar_permissao_sistema(e):
+        page.close(dlg_perm)
+        try:
+            perm_handler.request_permission(ft.PermissionType.MANAGE_EXTERNAL_STORAGE)
+        except Exception:
+            perm_handler.open_app_settings()
+
+    dlg_perm = ft.AlertDialog(
+        modal=True,
+        title=ft.Text(tr("perm_title")),
+        content=ft.Text(
+            tr("perm_desc") + "\n\n(Configurações > Apps > ABW-Converter > Acesso a todos os arquivos)",
+            size=13,
+        ),
+        actions=[
+            ft.TextButton(text=tr("close"), on_click=lambda e: page.close(dlg_perm)),
+            ft.ElevatedButton(text=tr("open_settings"), on_click=solicitar_permissao_sistema),
+        ],
     )
 
     def verificar_permissao_android():
@@ -677,15 +786,6 @@ def main(page: ft.Page):
             arq_teste.write_text("ok", encoding="utf-8")
             arq_teste.unlink()
         except Exception:
-            dlg_perm = ft.AlertDialog(
-                modal=True,
-                title=ft.Text(tr("perm_title")),
-                content=ft.Text(
-                    tr("perm_desc") + "\n\n(Configurações > Apps > ABW-Converter > Acesso a todos os arquivos)",
-                    size=13,
-                ),
-                actions=[ft.ElevatedButton(content=ft.Text("OK"), on_click=lambda e: page.close(dlg_perm))],
-            )
             page.open(dlg_perm)
 
     verificar_permissao_android()
