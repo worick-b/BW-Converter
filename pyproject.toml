@@ -1,6 +1,6 @@
 [project]
 name = "abetterway-converter"
-version = "1.2.0"
+version = "1.2.1"
 description = "FFmpeg 8.1 Audio & Video Converter"
 readme = "README.md"
 requires-python = ">=3.10"
