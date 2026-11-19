@@ -502,8 +502,6 @@ def main(page: ft.Page):
                         if destino_final.exists():
                             destino_final.unlink()
                         destino_ascii.replace(destino_final)
-                        tam_mb = destino_final.stat().st_size / (1024 * 1024)
-                        log_msg(f"  [✓] #{i}/{total} ({tam_mb:.2f} MB)", "sucesso")
                         ok_count += 1
                     else:
                         if destino_ascii.exists():
