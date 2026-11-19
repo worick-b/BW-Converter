@@ -17,11 +17,15 @@ TEXTOS = {
         "folder_btn": "Folder",
         "mode_batch": "Batch Mode: Entire working folder",
         "mode_single": "Single File: {name}",
-        "pick_file": "Single File: Select the File",
+        "mode_multi": "Selected Files: {n} file(s)",
+        "pick_file": "Select File(s)",
         "preset_lbl": "Active Preset",
         "manage_tip": "Manage Presets",
         "start_btn": "START CONVERSION",
         "running_btn": "CONVERTING...",
+        "cancel_btn": "CANCEL",
+        "canceling": "Canceling conversion...",
+        "canceled": "[!] Conversion canceled by user.",
         "ready": "Ready. Output saved to conv_abw",
         "status_ready": "Ready to convert.",
         "wait": "[!] Wait for the current task to finish.",
@@ -56,11 +60,15 @@ TEXTOS = {
         "folder_btn": "Pasta",
         "mode_batch": "Modo Lote: Toda a pasta de trabalho",
         "mode_single": "Modo Único: {name}",
-        "pick_file": "Modo Único: Selecionar o Arquivo",
+        "mode_multi": "Selecionados: {n} arquivo(s)",
+        "pick_file": "Selecionar Arquivo(s)",
         "preset_lbl": "Preset Ativo",
         "manage_tip": "Gerenciar Presets",
         "start_btn": "INICIAR CONVERSÃO",
         "running_btn": "CONVERTENDO...",
+        "cancel_btn": "CANCELAR",
+        "canceling": "Cancelando conversão...",
+        "canceled": "[!] Conversão cancelada pelo usuário.",
         "ready": "Pronto. Salvo em conv_abw",
         "status_ready": "Pronto para converter.",
         "wait": "[!] Aguarde a conversão atual terminar.",
@@ -214,10 +222,25 @@ def detectar_idioma(page: ft.Page) -> str:
     except Exception:
         return "en"
 
+
 def encontrar_pasta_original(nome_arquivo: str, tamanho_bytes: int, fallback: Path) -> Path:
-    if (fallback / nome_arquivo).exists():
-        return fallback
     sdcard = Path("/storage/emulated/0")
+    pastas_rapidas = [
+        fallback,
+        sdcard / "Download",
+        sdcard / "Music",
+        sdcard / "Documents",
+        sdcard / "Movies",
+        sdcard / "DCIM",
+    ]
+    for p in pastas_rapidas:
+        cand = p / nome_arquivo
+        try:
+            if cand.exists() and cand.stat().st_size == tamanho_bytes:
+                return p
+        except Exception:
+            pass
+
     if sdcard.exists():
         for raiz, dirs, arqs in os.walk(sdcard):
             dirs[:] = [d for d in dirs if not d.startswith(".") and d != "Android"]
@@ -247,10 +270,12 @@ def main(page: ft.Page):
     estado = {
         "lang": detectar_idioma(page),
         "pasta": pasta_inicial.resolve(),
-        "arquivo_unico": None,
+        "arquivos_selecionados": [],
         "presets": carregar_presets(),
         "editando_idx": None,
         "ocupado": False,
+        "cancelar": False,
+        "proc_atual": None,
     }
 
     def tr(chave: str, **kwargs) -> str:
@@ -312,13 +337,29 @@ def main(page: ft.Page):
 
     def atualizar_estado_ocupado(ocupado: bool):
         estado["ocupado"] = ocupado
+        page.keep_screen_on = ocupado
         btn_converter.disabled = ocupado
         btn_pasta.disabled = ocupado
         btn_pick.disabled = ocupado
         btn_manage.disabled = ocupado
         dd_presets.disabled = ocupado
+        btn_cancelar.visible = ocupado
+        btn_cancelar.disabled = False
         txt_start_btn.value = tr("running_btn") if ocupado else tr("start_btn")
         page.update()
+
+    def cancelar_conversao_click(e):
+        if estado["ocupado"] and not estado["cancelar"]:
+            estado["cancelar"] = True
+            btn_cancelar.disabled = True
+            txt_status.value = tr("canceling")
+            proc = estado.get("proc_atual")
+            if proc:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+            page.update()
 
     # --- FilePickers ---
     def on_pasta_result(e: ft.FilePickerResultEvent):
@@ -330,16 +371,15 @@ def main(page: ft.Page):
 
     def on_arquivo_result(e: ft.FilePickerResultEvent):
         if e.files:
-            arq_escolhido = next(iter(e.files))
-            if not arq_escolhido.path:
+            caminhos = [Path(f.path).resolve() for f in e.files if f.path]
+            if not caminhos:
                 return
-            caminho_arq = Path(arq_escolhido.path).resolve()
-            estado["arquivo_unico"] = caminho_arq
-            txt_alvo.value = tr("mode_single", name=caminho_arq.name)
+            estado["arquivos_selecionados"] = caminhos
+            if len(caminhos) == 1:
+                txt_alvo.value = tr("mode_single", name=caminhos[0].name)
+            else:
+                txt_alvo.value = tr("mode_multi", n=len(caminhos))
             txt_alvo.color = "#FFD54F"
-            if "cache" not in str(caminho_arq).lower() and "/data/" not in str(caminho_arq):
-                estado["pasta"] = caminho_arq.parent
-                txt_pasta.value = str(estado["pasta"])
             page.update()
 
     def on_importar_result(e: ft.FilePickerResultEvent):
@@ -369,6 +409,7 @@ def main(page: ft.Page):
     seletor_pasta = ft.FilePicker(on_result=on_pasta_result)
     seletor_arquivo = ft.FilePicker(on_result=on_arquivo_result)
     seletor_importar = ft.FilePicker(on_result=on_importar_result)
+
     def on_exportar_result(e: ft.FilePickerResultEvent):
         if e.path:
             try:
@@ -392,13 +433,13 @@ def main(page: ft.Page):
     def escolher_arquivo_click(e):
         if not estado["ocupado"]:
             seletor_arquivo.pick_files(
-                allow_multiple=False,
+                allow_multiple=True,
                 initial_directory=str(estado["pasta"]) if estado["pasta"].exists() else None,
             )
 
     def limpar_arquivo_click(e):
         if not estado["ocupado"]:
-            estado["arquivo_unico"] = None
+            estado["arquivos_selecionados"] = []
             txt_alvo.value = tr("mode_batch")
             txt_alvo.color = "#81C784"
             page.update()
@@ -423,49 +464,54 @@ def main(page: ft.Page):
             ext_saida = "." + ext_saida
         args_extras = shlex.split(preset.get("args", ""))
 
+        estado["cancelar"] = False
+        estado["proc_atual"] = None
         atualizar_estado_ocupado(True)
         lista_logs.controls.clear()
         set_progresso(0, tr("preparing"))
 
         def worker():
-            arq_cache_limpar = None
+            caches_limpar = []
+            pasta_tmp = obter_pasta_privada() / "abw_tmp"
             try:
-                if estado["arquivo_unico"]:
-                    arq_sel = estado["arquivo_unico"]
-                    arquivos = [arq_sel]
-                    if "cache" in str(arq_sel).lower() or "/data/" in str(arq_sel):
-                        arq_cache_limpar = arq_sel
-                        tam = arq_sel.stat().st_size if arq_sel.exists() else 0
-                        pasta_base = encontrar_pasta_original(arq_sel.name, tam, estado["pasta"])
-                    else:
-                        pasta_base = arq_sel.parent
+                if estado["arquivos_selecionados"]:
+                    arquivos = list(estado["arquivos_selecionados"])
                 else:
-                    pasta_base = estado["pasta"]
+                    pasta_base_lote = estado["pasta"]
                     exts_ignorar = {".json", ".txt", ".py", ".apk", ".zip", ".rar", ".7z", ".log", ".ini"}
                     arquivos = sorted(
-                        [a for a in pasta_base.iterdir() if a.is_file() and a.suffix.lower() not in exts_ignorar],
+                        [a for a in pasta_base_lote.iterdir() if a.is_file() and a.suffix.lower() not in exts_ignorar],
                         key=lambda x: x.name.lower(),
                     )
 
                 total = len(arquivos)
                 if total == 0:
-                    if str(pasta_base).startswith("/storage/emulated/0") and not tem_acesso_total_arquivos():
+                    if str(estado["pasta"]).startswith("/storage/emulated/0") and not tem_acesso_total_arquivos():
                         log_msg(f"[-] {tr('perm_title')}", "erro")
                         page.open(dlg_perm)
                     else:
                         log_msg(tr("no_media"), "erro")
                     return
 
-                pasta_saida = pasta_base / "conv_abw"
-                pasta_saida.mkdir(parents=True, exist_ok=True)
-                pasta_tmp = obter_pasta_privada() / "abw_tmp"
                 pasta_tmp.mkdir(parents=True, exist_ok=True)
-
                 log_msg(tr("starting", n=total), "titulo")
                 log_msg(f"    Preset: {preset['nome']}", "info")
 
                 ok_count = 0
                 for i, arq in enumerate(arquivos, 1):
+                    if estado["cancelar"]:
+                        break
+
+                    if "cache" in str(arq).lower() or "/data/" in str(arq):
+                        caches_limpar.append(arq)
+                        tam = arq.stat().st_size if arq.exists() else 0
+                        pasta_destino_base = encontrar_pasta_original(arq.name, tam, estado["pasta"])
+                    else:
+                        pasta_destino_base = arq.parent
+
+                    pasta_saida = pasta_destino_base / "conv_abw"
+                    pasta_saida.mkdir(parents=True, exist_ok=True)
+
                     nome_curto = arq.name if len(arq.name) <= 20 else arq.name[:17] + "..."
                     set_progresso((i - 1) / total, tr("converting", i=i, t=total, name=nome_curto, pct=0))
 
@@ -481,17 +527,20 @@ def main(page: ft.Page):
                     ] + args_extras + [str(destino_ascii)]
 
                     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="ignore")
-                    ultimo_pct = -1
+                    estado["proc_atual"] = proc
+                    ultimo_pct = -2
 
                     if proc.stdout:
                         for linha in proc.stdout:
+                            if estado["cancelar"]:
+                                break
                             linha = linha.strip()
                             if linha.startswith("out_time_us=") and duracao_total > 0:
                                 try:
                                     us = int(linha.split("=", 1).pop())
                                     seg_atual = us / 1_000_000.0
                                     pct_item = max(0, min(99, int((seg_atual / duracao_total) * 100)))
-                                    if pct_item != ultimo_pct:
+                                    if abs(pct_item - ultimo_pct) >= 2:
                                         ultimo_pct = pct_item
                                         prog_global = ((i - 1) + (pct_item / 100.0)) / total
                                         set_progresso(
@@ -502,6 +551,12 @@ def main(page: ft.Page):
                                     pass
 
                     proc.wait()
+                    estado["proc_atual"] = None
+
+                    if estado["cancelar"]:
+                        if destino_ascii.exists():
+                            destino_ascii.unlink()
+                        break
 
                     if proc.returncode == 0 and destino_ascii.exists() and destino_ascii.stat().st_size > 0:
                         if destino_final.exists():
@@ -515,18 +570,27 @@ def main(page: ft.Page):
 
                     set_progresso(i / total, tr("done_item", i=i, t=total))
 
-                if arq_cache_limpar and arq_cache_limpar.exists():
-                    try:
-                        arq_cache_limpar.unlink()
-                    except Exception:
-                        pass
-
-                log_msg(tr("finished", ok=ok_count, t=total), "sucesso")
+                if estado["cancelar"]:
+                    log_msg(tr("canceled"), "aviso")
+                else:
+                    log_msg(tr("finished", ok=ok_count, t=total), "sucesso")
             except Exception as ex:
                 log_msg(f"[-] {ex}", "erro")
             finally:
+                for arq_c in caches_limpar:
+                    if arq_c.exists():
+                        try:
+                            arq_c.unlink()
+                        except Exception:
+                            pass
+                for tmp_arq in pasta_tmp.glob("*"):
+                    try:
+                        tmp_arq.unlink()
+                    except Exception:
+                        pass
+                estado["proc_atual"] = None
                 atualizar_estado_ocupado(False)
-                set_progresso(1.0, tr("status_ready"))
+                set_progresso(0.0 if estado["cancelar"] else 1.0, tr("status_ready"))
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -696,6 +760,7 @@ def main(page: ft.Page):
         on_click=abrir_presets_click,
     )
     txt_start_btn = ft.Text(tr("start_btn"), size=14, weight=ft.FontWeight.BOLD, color="#FFFFFF")
+    txt_cancel_btn = ft.Text(tr("cancel_btn"), size=13, weight=ft.FontWeight.BOLD, color="#FFFFFF")
 
     def alternar_idioma_click(e):
         estado["lang"] = "en" if estado["lang"] == "pt" else "pt"
@@ -709,6 +774,7 @@ def main(page: ft.Page):
         dd_presets.label = tr("preset_lbl")
         btn_manage.tooltip = tr("manage_tip")
         txt_start_btn.value = tr("running_btn") if estado["ocupado"] else tr("start_btn")
+        txt_cancel_btn.value = tr("cancel_btn")
         txt_status.value = tr("status_ready")
 
         txt_dlg_title.value = tr("dlg_title")
@@ -726,11 +792,13 @@ def main(page: ft.Page):
         btn_perm_close.text = tr("close")
         btn_perm_settings.text = tr("open_settings")
 
-        txt_alvo.value = (
-            tr("mode_single", name=estado["arquivo_unico"].name)
-            if estado["arquivo_unico"]
-            else tr("mode_batch")
-        )
+        sels = estado["arquivos_selecionados"]
+        if len(sels) == 1:
+            txt_alvo.value = tr("mode_single", name=sels[0].name)
+        elif len(sels) > 1:
+            txt_alvo.value = tr("mode_multi", n=len(sels))
+        else:
+            txt_alvo.value = tr("mode_batch")
         page.update()
 
     btn_lang = ft.TextButton(
@@ -796,6 +864,20 @@ def main(page: ft.Page):
         on_click=iniciar_conversao_click,
     )
 
+    btn_cancelar = ft.ElevatedButton(
+        visible=False,
+        content=ft.Row(
+            [ft.Icon(ft.Icons.STOP_ROUNDED, size=20, color="#FFFFFF"), txt_cancel_btn],
+            alignment=ft.MainAxisAlignment.CENTER,
+        ),
+        style=ft.ButtonStyle(
+            bgcolor="#C62828",
+            shape=ft.RoundedRectangleBorder(radius=10),
+            padding=ft.padding.symmetric(vertical=14, horizontal=12),
+        ),
+        on_click=cancelar_conversao_click,
+    )
+
     card_logs = ft.Container(
         bgcolor="#0D0E11",
         border=ft.border.all(1, "#262930"),
@@ -816,7 +898,7 @@ def main(page: ft.Page):
         card_pasta,
         card_alvo,
         card_preset,
-        ft.Row([ft.Container(content=btn_converter, expand=True)]),
+        ft.Row([ft.Container(content=btn_converter, expand=True), btn_cancelar], spacing=8),
         ft.Column([txt_status, barra_progresso], spacing=4),
         card_logs,
     )
