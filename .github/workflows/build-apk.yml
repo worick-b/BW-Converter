@@ -21,9 +21,6 @@ jobs:
           pip install --upgrade pip
           pip install flet==0.28.3
 
-      - name: Configurar Cache do Gradle
-        uses: gradle/actions/setup-gradle@v4
-
       - name: Gerar APKs limpos por arquitetura (arm64 e armv7)
         run: |
           mkdir -p out_apks
