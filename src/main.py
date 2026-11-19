@@ -214,6 +214,22 @@ def detectar_idioma(page: ft.Page) -> str:
     except Exception:
         return "en"
 
+def encontrar_pasta_original(nome_arquivo: str, tamanho_bytes: int, fallback: Path) -> Path:
+    if (fallback / nome_arquivo).exists():
+        return fallback
+    sdcard = Path("/storage/emulated/0")
+    if sdcard.exists():
+        for raiz, dirs, arqs in os.walk(sdcard):
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "Android"]
+            if nome_arquivo in arqs:
+                cand = Path(raiz) / nome_arquivo
+                try:
+                    if cand.stat().st_size == tamanho_bytes:
+                        return Path(raiz)
+                except Exception:
+                    pass
+    return fallback
+
 def main(page: ft.Page):
     page.title = "ABW Converter"
     page.theme_mode = ft.ThemeMode.DARK
@@ -419,7 +435,8 @@ def main(page: ft.Page):
                     arquivos = [arq_sel]
                     if "cache" in str(arq_sel).lower() or "/data/" in str(arq_sel):
                         arq_cache_limpar = arq_sel
-                        pasta_base = estado["pasta"]
+                        tam = arq_sel.stat().st_size if arq_sel.exists() else 0
+                        pasta_base = encontrar_pasta_original(arq_sel.name, tam, estado["pasta"])
                     else:
                         pasta_base = arq_sel.parent
                 else:
