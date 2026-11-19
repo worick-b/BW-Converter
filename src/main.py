@@ -220,7 +220,7 @@ def detectar_idioma(page: ft.Page) -> str:
         return "en"
 
 def main(page: ft.Page):
-    page.title = "ABW-Converter"
+    page.title = "ABW Converter"
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = "#121316"
     page.padding = 14
@@ -809,7 +809,7 @@ def main(page: ft.Page):
     page.add(
         ft.Row(
             [
-                ft.Text("ABW-Converter", size=18, weight=ft.FontWeight.BOLD, color="#CE93D8"),
+                ft.Text("ABW Converter", size=18, weight=ft.FontWeight.BOLD, color="#CE93D8"),
                 ft.Row([txt_subtitulo, btn_lang], spacing=4),
             ],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
