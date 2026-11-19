@@ -227,9 +227,9 @@ def main(page: ft.Page):
     page.window.width = 430
     page.window.height = 780
 
-    pasta_inicial = Path("/storage/emulated/0")
+    pasta_inicial = Path("/storage/emulated/0/Download")
     if not pasta_inicial.exists():
-        pasta_inicial = Path.home()
+        pasta_inicial = Path("/storage/emulated/0") if Path("/storage/emulated/0").exists() else Path.home()
 
     estado = {
         "lang": detectar_idioma(page),
@@ -318,9 +318,18 @@ def main(page: ft.Page):
     def on_arquivo_result(e: ft.FilePickerResultEvent):
         if e.files:
             arq_escolhido = next(iter(e.files))
-            estado["arquivo_unico"] = Path(arq_escolhido.path).resolve()
-            txt_alvo.value = tr("mode_single", name=estado["arquivo_unico"].name)
+            if not arq_escolhido.path:
+                log_msg("[-] Caminho do arquivo inválido.", "erro")
+                return
+            caminho_arq = Path(arq_escolhido.path).resolve()
+            estado["arquivo_unico"] = caminho_arq
+            txt_alvo.value = tr("mode_single", name=caminho_arq.name)
             txt_alvo.color = "#FFD54F"
+
+            if "cache" not in str(caminho_arq).lower() and "/data/" not in str(caminho_arq):
+                estado["pasta"] = caminho_arq.parent
+                txt_pasta.value = str(estado["pasta"])
+
             page.update()
 
     def on_importar_result(e: ft.FilePickerResultEvent):
@@ -350,6 +359,7 @@ def main(page: ft.Page):
     seletor_pasta = ft.FilePicker(on_result=on_pasta_result)
     seletor_arquivo = ft.FilePicker(on_result=on_arquivo_result)
     seletor_importar = ft.FilePicker(on_result=on_importar_result)
+
     def on_exportar_result(e: ft.FilePickerResultEvent):
         if e.path:
             try:
@@ -413,8 +423,11 @@ def main(page: ft.Page):
             try:
                 if estado["arquivo_unico"]:
                     arq_sel = estado["arquivo_unico"]
+                    if not arq_sel.exists():
+                        log_msg(f"[-] Arquivo não encontrado: {arq_sel.name}", "erro")
+                        return
                     arquivos = [arq_sel]
-                    if "cache" in str(arq_sel) or "/data/" in str(arq_sel):
+                    if "cache" in str(arq_sel).lower() or "/data/" in str(arq_sel):
                         arq_cache_limpar = arq_sel
                         pasta_base = estado["pasta"]
                     else:
@@ -437,12 +450,19 @@ def main(page: ft.Page):
                     return
 
                 pasta_saida = pasta_base / "conv_abw"
-                pasta_saida.mkdir(parents=True, exist_ok=True)
-                pasta_tmp = pasta_saida / ".abw_tmp"
+                try:
+                    pasta_saida.mkdir(parents=True, exist_ok=True)
+                except PermissionError:
+                    log_msg(f"[-] Sem permissão em: {pasta_saida}", "erro")
+                    page.open(dlg_perm)
+                    return
+
+                pasta_tmp = obter_pasta_privada() / "abw_tmp"
                 pasta_tmp.mkdir(parents=True, exist_ok=True)
 
                 log_msg(tr("starting", n=total), "titulo")
                 log_msg(f"    Preset: {preset['nome']}", "info")
+                log_msg(f"    Destino: {pasta_saida}", "info")
 
                 ok_count = 0
                 for i, arq in enumerate(arquivos, 1):
@@ -451,16 +471,7 @@ def main(page: ft.Page):
 
                     destino_final = pasta_saida / f"{arq.stem}{ext_saida}"
                     destino_ascii = pasta_tmp / f"out_{i}{ext_saida}"
-                    link_ascii = pasta_tmp / f"in_{i}{arq.suffix}"
-
                     entrada_cmd = str(arq)
-                    try:
-                        if link_ascii.exists() or link_ascii.is_symlink():
-                            link_ascii.unlink()
-                        os.symlink(str(arq), str(link_ascii))
-                        entrada_cmd = str(link_ascii)
-                    except Exception:
-                        entrada_cmd = str(arq)
 
                     duracao_total = obter_duracao_segundos(bin_ffmpeg, entrada_cmd)
 
@@ -469,7 +480,7 @@ def main(page: ft.Page):
                         "-progress", "pipe:1", "-i", entrada_cmd
                     ] + args_extras + [str(destino_ascii)]
 
-                    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="ignore")
+                    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="ignore")
                     ultimo_pct = -1
 
                     if proc.stdout:
@@ -492,28 +503,18 @@ def main(page: ft.Page):
 
                     proc.wait()
 
-                    if link_ascii.exists() or link_ascii.is_symlink():
-                        try:
-                            link_ascii.unlink()
-                        except Exception:
-                            pass
-
                     if proc.returncode == 0 and destino_ascii.exists() and destino_ascii.stat().st_size > 0:
                         if destino_final.exists():
                             destino_final.unlink()
-                        destino_ascii.replace(destino_final)
+                        shutil.move(str(destino_ascii), str(destino_final))
                         ok_count += 1
                     else:
+                        err_out = (proc.stderr.read() if proc.stderr else "").strip()
                         if destino_ascii.exists():
                             destino_ascii.unlink()
-                        log_msg(f"  [!] #{i}/{total}", "erro")
+                        log_msg(f"  [!] Falha #{i}/{total}: {err_out[:80]}", "erro")
 
                     set_progresso(i / total, tr("done_item", i=i, t=total))
-
-                try:
-                    pasta_tmp.rmdir()
-                except Exception:
-                    pass
 
                 if arq_cache_limpar and arq_cache_limpar.exists():
                     try:
@@ -631,7 +632,6 @@ def main(page: ft.Page):
             allowed_extensions=["json"],
             initial_directory=str(estado["pasta"]) if estado["pasta"].exists() else None,
         )
-
 
     btn_salvar_preset = ft.ElevatedButton(text=tr("save"), icon=ft.Icons.SAVE, on_click=salvar_preset_click)
     btn_restaurar = ft.TextButton(text=tr("restore"), icon=ft.Icons.RESTORE, on_click=restaurar_presets_click)
