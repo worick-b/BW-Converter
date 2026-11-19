@@ -340,8 +340,7 @@ def main(page: ft.Page):
     seletor_pasta = ft.FilePicker(on_result=on_pasta_result)
     seletor_arquivo = ft.FilePicker(on_result=on_arquivo_result)
     seletor_importar = ft.FilePicker(on_result=on_importar_result)
-    perm_handler = ft.PermissionHandler()
-    page.overlay.extend([seletor_pasta, seletor_arquivo, seletor_importar, perm_handler])
+    page.overlay.extend([seletor_pasta, seletor_arquivo, seletor_importar])
 
     def mudar_pasta_click(e):
         if not estado["ocupado"]:
@@ -770,8 +769,7 @@ def main(page: ft.Page):
             size=13,
         ),
         actions=[
-            ft.TextButton(text=tr("close"), on_click=lambda e: page.close(dlg_perm)),
-            ft.ElevatedButton(text=tr("open_settings"), on_click=solicitar_permissao_sistema),
+            ft.ElevatedButton(text="OK", on_click=lambda e: page.close(dlg_perm)),
         ],
     )
 
