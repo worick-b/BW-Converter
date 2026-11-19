@@ -17,24 +17,24 @@ TEXTOS = {
         "folder_btn": "Folder",
         "mode_batch": "Batch Mode: Entire working folder",
         "mode_single": "Single File: {name}",
-        "pick_file": "Select 1 Specific File (Optional)",
+        "pick_file": "Single File: Select the File",
         "preset_lbl": "Active Preset",
         "manage_tip": "Manage Presets",
         "start_btn": "START CONVERSION",
         "running_btn": "CONVERTING...",
-        "ready": "Ready. Output saved to /convertido",
+        "ready": "Ready. Output saved to conv_abw",
         "status_ready": "Ready to convert.",
         "wait": "[!] Wait for the current task to finish.",
         "no_ffmpeg": "[-] Embedded FFmpeg (libffmpeg_bin.so) not found!",
         "preparing": "Preparing FFmpeg...",
         "no_media": "[-] No files found to convert.",
-        "starting": "[+] Starting {n} file(s) -> /convertido",
+        "starting": "[+] Starting {n} file(s)",
         "converting": "Converting {i}/{t}: {name} ({pct}%)",
         "done_item": "Done {i}/{t}",
         "failed_item": "  [!] Skipped/Failed {name}",
-        "finished": "[✓] Finished: {ok}/{t} saved in /convertido",
+        "finished": "[✓] Finished: {ok}/{t}",
         "folder_set": "[+] Folder set: {name}",
-        "dlg_title": "FFmpeg Presets (/abw)",
+        "dlg_title": "FFmpeg Presets",
         "name_lbl": "Preset Name",
         "ext_lbl": "Extension (e.g. .mp4, .m4a)",
         "args_lbl": "FFmpeg Arguments",
@@ -47,7 +47,7 @@ TEXTOS = {
         "imported": "[✓] Imported {n} preset(s).",
         "restored": "[✓] Default presets restored.",
         "perm_title": "Storage Permission Required",
-        "perm_desc": "Allow 'All files access' so ABW-Converter can read Download and save converted files.\n\n(Settings > Apps > ABW-Converter > All files access)",
+        "perm_desc": "Allow 'All files access' to function correctly.\n\n(Settings > All files access)",
         "open_settings": "Open Settings",
     },
     "pt": {
@@ -56,24 +56,24 @@ TEXTOS = {
         "folder_btn": "Pasta",
         "mode_batch": "Modo Lote: Toda a pasta de trabalho",
         "mode_single": "Modo Único: {name}",
-        "pick_file": "Selecionar 1 Arquivo Específico (Opcional)",
+        "pick_file": "Modo Único: Selecionar o Arquivo",
         "preset_lbl": "Preset Ativo",
         "manage_tip": "Gerenciar Presets",
         "start_btn": "INICIAR CONVERSÃO",
         "running_btn": "CONVERTENDO...",
-        "ready": "Pronto. Saída automática em /convertido",
+        "ready": "Pronto. Salvo em conv_abw",
         "status_ready": "Pronto para converter.",
         "wait": "[!] Aguarde a conversão atual terminar.",
         "no_ffmpeg": "[-] FFmpeg embutido (libffmpeg_bin.so) não encontrado!",
         "preparing": "Preparando FFmpeg...",
         "no_media": "[-] Nenhum arquivo encontrado para converter.",
-        "starting": "[+] Iniciando {n} arquivo(s) -> /convertido",
+        "starting": "[+] Iniciando {n} arquivo(s)",
         "converting": "Convertendo {i}/{t}: {name} ({pct}%)",
         "done_item": "Concluído {i}/{t}",
         "failed_item": "  [!] Ignorado/Falha em {name}",
-        "finished": "[✓] Finalizado: {ok}/{t} salvos em /convertido",
+        "finished": "[✓] Finalizado: {ok}/{t}",
         "folder_set": "[+] Pasta definida: {name}",
-        "dlg_title": "Presets FFmpeg (/abw)",
+        "dlg_title": "Presets FFmpeg",
         "name_lbl": "Nome do Preset",
         "ext_lbl": "Extensão (ex: .mp4, .m4a)",
         "args_lbl": "Argumentos FFmpeg",
@@ -86,14 +86,14 @@ TEXTOS = {
         "imported": "[✓] {n} preset(s) importado(s).",
         "restored": "[✓] Presets padrão restaurados.",
         "perm_title": "Permissão de Arquivos Necessária",
-        "perm_desc": "Ative 'Acesso a todos os arquivos' para ler a pasta Download e salvar os convertidos.\n\n(Configurações > Apps > ABW-Converter > Acesso a todos os arquivos)",
+        "perm_desc": "Ative 'Acesso a todos os arquivos' para funcionar corretamente.\n\n(Configurações > Acesso a todos os arquivos)",
         "open_settings": "Abrir Configurações",
     },
 }
 
 PRESETS_INICIAIS = [
     {"nome": "Audio MP3 (192k)", "ext": ".mp3", "args": "-vn -c:a libmp3lame -b:a 192k -ar 44100"},
-    {"nome": "Audio HE-AAC v2 (39k)", "ext": ".m4a", "args": "-vn -c:a libfdk_aac -profile:a aac_he_v2 -ac 2 -b:a 39k -ar 44100"},
+    {"nome": "Audio HE-AAC v2 (39k)", "ext": ".aac", "args": "-vn -c:a libfdk_aac -profile:a aac_he_v2 -ac 2 -b:a 39k -ar 44100"},
     {"nome": "Video MP4 H.264 (CRF 23)", "ext": ".mp4", "args": "-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -c:a libfdk_aac -b:a 128k"},
 ]
 
@@ -227,9 +227,7 @@ def main(page: ft.Page):
     page.window.width = 430
     page.window.height = 780
 
-    pasta_inicial = Path("/storage/emulated/0/Download")
-    if not pasta_inicial.exists():
-        pasta_inicial = Path.home() / "Downloads"
+    pasta_inicial = Path("/storage/emulated/0")
     if not pasta_inicial.exists():
         pasta_inicial = Path.home()
 
@@ -413,12 +411,16 @@ def main(page: ft.Page):
         def worker():
             arq_cache_limpar = None
             try:
-                pasta_base = estado["pasta"]
                 if estado["arquivo_unico"]:
-                    arquivos = [estado["arquivo_unico"]]
-                    if "cache" in str(estado["arquivo_unico"]):
-                        arq_cache_limpar = estado["arquivo_unico"]
+                    arq_sel = estado["arquivo_unico"]
+                    arquivos = [arq_sel]
+                    if "cache" in str(arq_sel) or "/data/" in str(arq_sel):
+                        arq_cache_limpar = arq_sel
+                        pasta_base = estado["pasta"]
+                    else:
+                        pasta_base = arq_sel.parent
                 else:
+                    pasta_base = estado["pasta"]
                     exts_ignorar = {".json", ".txt", ".py", ".apk", ".zip", ".rar", ".7z", ".log", ".ini"}
                     arquivos = sorted(
                         [a for a in pasta_base.iterdir() if a.is_file() and a.suffix.lower() not in exts_ignorar],
@@ -427,10 +429,14 @@ def main(page: ft.Page):
 
                 total = len(arquivos)
                 if total == 0:
-                    log_msg(tr("no_media"), "erro")
+                    if str(pasta_base).startswith("/storage/emulated/0") and not tem_acesso_total_arquivos():
+                        log_msg(f"[-] {tr('perm_title')}", "erro")
+                        page.open(dlg_perm)
+                    else:
+                        log_msg(tr("no_media"), "erro")
                     return
 
-                pasta_saida = pasta_base / "convertido"
+                pasta_saida = pasta_base / "conv_abw"
                 pasta_saida.mkdir(parents=True, exist_ok=True)
                 pasta_tmp = pasta_saida / ".abw_tmp"
                 pasta_tmp.mkdir(parents=True, exist_ok=True)
@@ -497,12 +503,12 @@ def main(page: ft.Page):
                             destino_final.unlink()
                         destino_ascii.replace(destino_final)
                         tam_mb = destino_final.stat().st_size / (1024 * 1024)
-                        log_msg(f"  [✓] {destino_final.name} ({tam_mb:.2f} MB)", "sucesso")
+                        log_msg(f"  [✓] #{i}/{total} ({tam_mb:.2f} MB)", "sucesso")
                         ok_count += 1
                     else:
                         if destino_ascii.exists():
                             destino_ascii.unlink()
-                        log_msg(tr("failed_item", name=arq.name), "erro")
+                        log_msg(f"  [!] #{i}/{total}", "erro")
 
                     set_progresso(i / total, tr("done_item", i=i, t=total))
 
@@ -819,12 +825,29 @@ def main(page: ft.Page):
     )
 
     # --- Verificação de Permissão Android ---
+    def tem_acesso_total_arquivos() -> bool:
+        sdcard = Path("/storage/emulated/0")
+        if not sdcard.exists():
+            return True
+        try:
+            arq_teste = sdcard / ".abw_perm_check"
+            arq_teste.write_text("ok", encoding="utf-8")
+            arq_teste.unlink()
+            return True
+        except Exception:
+            return False
+
     def solicitar_permissao_sistema(e):
         page.close(dlg_perm)
         try:
-            perm_handler.request_permission(fph.PermissionType.MANAGE_EXTERNAL_STORAGE)
+            status = perm_handler.request_permission(fph.PermissionType.MANAGE_EXTERNAL_STORAGE)
+            if status != fph.PermissionStatus.GRANTED:
+                perm_handler.open_app_settings()
         except Exception:
-            perm_handler.open_app_settings()
+            try:
+                perm_handler.open_app_settings()
+            except Exception:
+                pass
 
     txt_perm_title = ft.Text(tr("perm_title"))
     txt_perm_desc = ft.Text(tr("perm_desc"), size=13)
@@ -839,15 +862,8 @@ def main(page: ft.Page):
     )
 
     def verificar_permissao_android():
-      pasta_teste = Path("/storage/emulated/0/Download")
-      if not pasta_teste.exists():
-          return
-      try:
-          arq_teste = pasta_teste / ".abw_perm_check"
-          arq_teste.write_text("ok", encoding="utf-8")
-          arq_teste.unlink()
-      except Exception:
-          page.open(dlg_perm)
+        if not tem_acesso_total_arquivos():
+            page.open(dlg_perm)
 
     verificar_permissao_android()
     log_msg(f"[✓] {tr('ready')}", "sucesso")
