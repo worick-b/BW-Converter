@@ -88,6 +88,10 @@ jobs:
             rm -f "${apk}.aligned" inj_v7/AndroidManifest.xml
           done
 
+          mv build/apk/app-arm64-v8a-release.apk build/apk/abetterway-converter-arm64-v8a.apk
+          mv build/apk/app-armeabi-v7a-release.apk build/apk/abetterway-converter-armeabi-v7a.apk
+          rm -f build/apk/app-x86_64-release.apk
+
       - name: Publicar APKs na aba Releases
         uses: softprops/action-gh-release@v2
         with:
