@@ -9,6 +9,7 @@ authors = [
 ]
 dependencies = [
     "flet>=1.1.2"
+    "certifi"
 ]
 
 [dependency-groups]
