@@ -27,11 +27,11 @@ jobs:
       - name: Gerar APKs limpos por arquitetura (arm64 e armv7)
         run: |
           mkdir -p out_apks
-          flet build apk --arch arm64-v8a --compile-app --compile-packages
+          flet build apk --module-name src.main --assets src/assets --arch arm64-v8a --compile-app --compile-packages
           cp build/apk/*.apk out_apks/abetterway-converter-arm64-v8a.apk
 
           rm -rf build/apk build/flutter
-          flet build apk --arch armeabi-v7a --compile-app --compile-packages
+          flet build apk --module-name src.main --assets src/assets --arch armeabi-v7a --compile-app --compile-packages
           cp build/apk/*.apk out_apks/abetterway-converter-armeabi-v7a.apk
 
       - name: Ativar extractNativeLibs e injetar FFmpeg 8.1
