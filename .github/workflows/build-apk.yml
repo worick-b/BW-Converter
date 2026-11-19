@@ -21,12 +21,17 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Baixar template oficial do Flet e injetar FFmpeg 8.1
+      - name: Extrair template local do Flet e injetar FFmpeg 8.1
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          FLET_VER=$(python -c "import flet; print(flet.__version__)")
-          git clone --depth 1 --branch "v${FLET_VER}" https://github.com meu_template || git clone --depth 1 https://github.com meu_template
+          python - << 'EOF'
+          import shutil, pathlib, flet_cli
+          tpl_src = next(pathlib.Path(flet_cli.__file__).resolve().parent.rglob("*template*"))
+          if tpl_src.is_file():
+              tpl_src = tpl_src.parent
+          shutil.copytree(tpl_src, "meu_template", dirs_exist_ok=True)
+          EOF
 
           gh release download -R xonev8/FFmpeg-Android-HEAAC -p "*arm64-v8a*.zip" -O v8.zip
           gh release download -R xonev8/FFmpeg-Android-HEAAC -p "*armeabi-v7a*.zip" -O v7.zip
@@ -38,11 +43,12 @@ jobs:
 
           python - << 'EOF'
           import xml.etree.ElementTree as ET
+          ns = "http://android.com"
           manifest = "meu_template/android/app/src/main/AndroidManifest.xml"
-          ET.register_namespace("android", "http://android.com")
+          ET.register_namespace("android", ns)
           tree = ET.parse(manifest)
           app = tree.getroot().find("application")
-          app.set("{http://android.com}extractNativeLibs", "true")
+          app.set(f"{{{ns}}}extractNativeLibs", "true")
           tree.write(manifest, encoding="utf-8", xml_declaration=True)
           EOF
 
