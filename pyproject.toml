@@ -8,7 +8,7 @@ authors = [
     { name = "ABW", email = "ABW@local" }
 ]
 dependencies = [
-    "flet>=1.1.2"
+    "flet>=1.1.2",
     "certifi"
 ]
 
