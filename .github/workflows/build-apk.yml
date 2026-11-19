@@ -27,11 +27,11 @@ jobs:
       - name: Gerar APKs limpos por arquitetura (arm64 e armv7)
         run: |
           mkdir -p out_apks
-          flet build apk --module-name src.main --arch arm64-v8a --compile-app --compile-packages
+          flet build apk --arch arm64-v8a --compile-app --compile-packages
           cp build/apk/*.apk out_apks/abetterway-converter-arm64-v8a.apk
 
           rm -rf build/apk build/flutter
-          flet build apk --module-name src.main --arch armeabi-v7a --compile-app --compile-packages
+          flet build apk --arch armeabi-v7a --compile-app --compile-packages
           cp build/apk/*.apk out_apks/abetterway-converter-armeabi-v7a.apk
 
       - name: Ativar extractNativeLibs e injetar FFmpeg 8.1
@@ -47,26 +47,30 @@ jobs:
 
           cat << 'EOF' > patch_axml.py
           import sys, struct
-          data = bytearray(open(sys.argv, "rb").read())
+
+          filepath = sys.argv[1]
+          data = bytearray(open(filepath, "rb").read())
           res_id = struct.pack("<I", 0x010104ea)
           idx = data.find(res_id)
+
           if idx != -1:
               pos = data.find(b"\x02\x01\x10\x00")
               while pos != -1 and pos + 36 < len(data):
-                  attr_count = struct.unpack_from("<H", data, pos + 28)
+                  attr_count = struct.unpack_from("<H", data, pos + 28)[0]
                   attr_off = pos + 36
                   for i in range(attr_count):
                       entry = attr_off + i * 20
                       if entry + 20 <= len(data):
-                          name_idx = struct.unpack_from("<I", data, entry + 4)
+                          name_idx = struct.unpack_from("<I", data, entry + 4)[0]
                           val_type = data[entry + 15]
-                          val_data = struct.unpack_from("<I", data, entry + 16)
+                          val_data = struct.unpack_from("<I", data, entry + 16)[0]
                           if val_type == 0x12 and val_data == 0:
                               id_pos = idx - name_idx * 4
                               if id_pos >= 0 and data[id_pos:id_pos+4] == res_id:
                                   struct.pack_into("<I", data, entry + 16, 0xFFFFFFFF)
                   pos = data.find(b"\x02\x01\x10\x00", pos + 4)
-          open(sys.argv, "wb").write(data)
+
+          open(filepath, "wb").write(data)
           EOF
 
           BUILD_TOOLS=$(ls -d /usr/local/lib/android/sdk/build-tools/* | sort -V | tail -n 1)
