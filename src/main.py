@@ -44,7 +44,6 @@ TEXTOS = {
         "restored": "[✓] Default presets restored.",
         "perm_title": "Storage Permission Required",
         "perm_desc": "Allow 'All files access' so ABW-Converter can read Download and save converted files.",
-        "perm_btn": "Grant Permission",
     },
     "pt": {
         "subtitle": "Motor FFmpeg 8.1",
@@ -81,13 +80,12 @@ TEXTOS = {
         "restored": "[✓] Presets padrão restaurados.",
         "perm_title": "Permissão de Arquivos Necessária",
         "perm_desc": "Ative 'Acesso a todos os arquivos' para ler a pasta Download e salvar os convertidos.",
-        "perm_btn": "Liberar Acesso",
     }
 }
 
 PRESETS_INICIAIS = [
     {"nome": "Audio MP3 (192k)", "ext": ".mp3", "args": "-vn -c:a libmp3lame -b:a 192k -ar 44100"},
-    {"nome": "Audio HE-AAC v2 (39k)", "ext": ".aac", "args": "-vn -c:a libfdk_aac -profile:a aac_he_v2 -ac 2 -b:a 39k -ar 44100"},
+    {"nome": "Audio HE-AAC v2 (39k)", "ext": ".m4a", "args": "-vn -c:a libfdk_aac -profile:a aac_he_v2 -ac 2 -b:a 39k -ar 44100"},
     {"nome": "Video MP4 H.264 (CRF 23)", "ext": ".mp4", "args": "-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -c:a libfdk_aac -b:a 128k"},
 ]
 
@@ -272,35 +270,59 @@ def main(page: ft.Page):
         txt_status.value = texto
         page.update()
 
-    seletor_pasta = ft.FilePicker()
-    seletor_arquivo = ft.FilePicker()
-    seletor_importar = ft.FilePicker()
-
-    async def mudar_pasta_click(e):
-        if estado["ocupado"]:
-            return
-        cam = await seletor_pasta.get_directory_path(
-            initial_directory=str(estado["pasta"]) if estado["pasta"].exists() else None
-        )
-        if cam:
-            estado["pasta"] = Path(cam).resolve()
+    def on_pasta_result(e: ft.FilePickerResultEvent):
+        if e.path:
+            estado["pasta"] = Path(e.path).resolve()
             txt_pasta.value = str(estado["pasta"])
             limpar_arquivo_click(None)
             log_msg(tr("folder_set", name=estado["pasta"].name), "titulo")
 
-    async def escolher_arquivo_click(e):
-        if estado["ocupado"]:
-            return
-        arqs = await seletor_arquivo.pick_files(
-            allow_multiple=False,
-            initial_directory=str(estado["pasta"]) if estado["pasta"].exists() else None,
-        )
-        primeiro = next(iter(arqs), None) if arqs else None
-        if primeiro and primeiro.path:
-            estado["arquivo_unico"] = Path(primeiro.path).resolve()
+    def on_arquivo_result(e: ft.FilePickerResultEvent):
+        if e.files:
+            estado["arquivo_unico"] = Path(e.files[0].path).resolve()
             txt_alvo.value = tr("mode_single", name=estado["arquivo_unico"].name)
             txt_alvo.color = "#FFD54F"
             page.update()
+
+    def on_importar_result(e: ft.FilePickerResultEvent):
+        if e.files:
+            try:
+                novos = json.loads(Path(e.files[0].path).read_text(encoding="utf-8"))
+                if isinstance(novos, list):
+                    nomes_atuais = {p["nome"].strip().lower() for p in estado["presets"]}
+                    adicionados = 0
+                    for it in novos:
+                        if isinstance(it, dict) and {"nome", "ext", "args"} <= it.keys():
+                            nome_limpo = str(it["nome"]).strip()
+                            if nome_limpo and nome_limpo.lower() not in nomes_atuais:
+                                estado["presets"].append(
+                                    {"nome": nome_limpo, "ext": str(it["ext"]).strip(), "args": str(it["args"]).strip()}
+                                )
+                                nomes_atuais.add(nome_limpo.lower())
+                                adicionados += 1
+                    if adicionados > 0:
+                        salvar_presets(estado["presets"])
+                        atualizar_lista_presets_ui()
+            except Exception:
+                pass
+
+    seletor_pasta = ft.FilePicker(on_result=on_pasta_result)
+    seletor_arquivo = ft.FilePicker(on_result=on_arquivo_result)
+    seletor_importar = ft.FilePicker(on_result=on_importar_result)
+    page.overlay.extend([seletor_pasta, seletor_arquivo, seletor_importar])
+
+    def mudar_pasta_click(e):
+        if not estado["ocupado"]:
+            seletor_pasta.get_directory_path(
+                initial_directory=str(estado["pasta"]) if estado["pasta"].exists() else None
+            )
+
+    def escolher_arquivo_click(e):
+        if not estado["ocupado"]:
+            seletor_arquivo.pick_files(
+                allow_multiple=False,
+                initial_directory=str(estado["pasta"]) if estado["pasta"].exists() else None,
+            )
 
     def limpar_arquivo_click(e):
         estado["arquivo_unico"] = None
@@ -419,7 +441,7 @@ def main(page: ft.Page):
     col_lista_presets = ft.Column(spacing=6, scroll=ft.ScrollMode.AUTO, height=160)
 
     def fechar_presets_dlg(e=None):
-        dialog_presets.open = False
+        page.close(dialog_presets)
         recarregar_dropdown(int(dd_presets.value or 0))
         page.update()
 
@@ -494,33 +516,12 @@ def main(page: ft.Page):
         fechar_presets_dlg()
         log_msg(tr("exported", path=destino), "sucesso")
 
-    async def importar_presets_click(e):
-        arqs = await seletor_importar.pick_files(
+    def importar_presets_click(e):
+        seletor_importar.pick_files(
             allow_multiple=False,
             allowed_extensions=["json"],
             initial_directory=str(obter_pasta_abw()),
         )
-        primeiro = next(iter(arqs), None) if arqs else None
-        if primeiro and primeiro.path:
-            try:
-                novos = json.loads(Path(primeiro.path).read_text(encoding="utf-8"))
-                if isinstance(novos, list):
-                    nomes_atuais = {p["nome"].strip().lower() for p in estado["presets"]}
-                    adicionados = 0
-                    for it in novos:
-                        if isinstance(it, dict) and {"nome", "ext", "args"} <= it.keys():
-                            nome_limpo = str(it["nome"]).strip()
-                            if nome_limpo and nome_limpo.lower() not in nomes_atuais:
-                                estado["presets"].append(
-                                    {"nome": nome_limpo, "ext": str(it["ext"]).strip(), "args": str(it["args"]).strip()}
-                                )
-                                nomes_atuais.add(nome_limpo.lower())
-                                adicionados += 1
-                    if adicionados > 0:
-                        salvar_presets(estado["presets"])
-                        atualizar_lista_presets_ui()
-            except Exception:
-                pass
 
     txt_btn_salvar = ft.Text(tr("save"))
     txt_btn_restaurar = ft.Text(tr("restore"))
@@ -528,7 +529,7 @@ def main(page: ft.Page):
     txt_btn_exportar = ft.Text(tr("export"))
     txt_btn_fechar = ft.Text(tr("close"))
 
-    btn_salvar_preset = ft.Button(content=txt_btn_salvar, icon=ft.Icons.SAVE, on_click=salvar_preset_click)
+    btn_salvar_preset = ft.ElevatedButton(content=txt_btn_salvar, icon=ft.Icons.SAVE, on_click=salvar_preset_click)
     btn_restaurar = ft.TextButton(content=txt_btn_restaurar, icon=ft.Icons.RESTORE, on_click=restaurar_presets_click)
     btn_importar = ft.TextButton(content=txt_btn_importar, icon=ft.Icons.UPLOAD_FILE, on_click=importar_presets_click)
     btn_exportar = ft.TextButton(content=txt_btn_exportar, icon=ft.Icons.DOWNLOAD, on_click=exportar_presets_click)
@@ -561,19 +562,19 @@ def main(page: ft.Page):
         estado["editando_idx"] = None
         inp_nome.value = inp_ext.value = inp_args.value = ""
         atualizar_lista_presets_ui()
-        page.show_dialog(dialog_presets)
+        page.open(dialog_presets)
 
     txt_btn_pasta = ft.Text(tr("folder_btn"))
     txt_btn_pick = ft.Text(tr("pick_file"))
     txt_btn_lang = ft.Text(estado["lang"].upper(), weight=ft.FontWeight.BOLD, color="#CE93D8")
 
-    btn_pasta = ft.Button(
+    btn_pasta = ft.ElevatedButton(
         content=txt_btn_pasta,
         icon=ft.Icons.FOLDER_OPEN,
         style=ft.ButtonStyle(bgcolor="#2B3240", color="#FFFFFF", shape=ft.RoundedRectangleBorder(radius=8)),
         on_click=mudar_pasta_click,
     )
-    btn_pick = ft.Button(
+    btn_pick = ft.ElevatedButton(
         content=txt_btn_pick,
         icon=ft.Icons.AUDIO_FILE,
         style=ft.ButtonStyle(bgcolor="#232834", color="#E0E0E0", shape=ft.RoundedRectangleBorder(radius=8)),
@@ -615,7 +616,7 @@ def main(page: ft.Page):
 
     card_pasta = ft.Container(
         bgcolor="#191B20",
-        border=ft.Border.all(1, "#2C303A"),
+        border=ft.border.all(1, "#2C303A"),
         border_radius=10,
         padding=10,
         content=ft.Row(
@@ -629,7 +630,7 @@ def main(page: ft.Page):
     )
     card_alvo = ft.Container(
         bgcolor="#191B20",
-        border=ft.Border.all(1, "#2C303A"),
+        border=ft.border.all(1, "#2C303A"),
         border_radius=10,
         padding=10,
         content=ft.Column(
@@ -642,18 +643,18 @@ def main(page: ft.Page):
     )
     card_preset = ft.Container(
         bgcolor="#191B20",
-        border=ft.Border.all(1, "#2C303A"),
+        border=ft.border.all(1, "#2C303A"),
         border_radius=10,
         padding=10,
         content=ft.Row([dd_presets, btn_manage], spacing=6),
     )
-    btn_converter = ft.Button(
+    btn_converter = ft.ElevatedButton(
         content=ft.Row([ft.Icon(ft.Icons.PLAY_ARROW_ROUNDED, size=22, color="#FFFFFF"), txt_start_btn], alignment=ft.MainAxisAlignment.CENTER),
-        style=ft.ButtonStyle(bgcolor="#7B1FA2", shape=ft.RoundedRectangleBorder(radius=10), padding=ft.Padding.symmetric(vertical=14)),
+        style=ft.ButtonStyle(bgcolor="#7B1FA2", shape=ft.RoundedRectangleBorder(radius=10), padding=ft.padding.symmetric(vertical=14)),
         width=400,
         on_click=iniciar_conversao_click,
     )
-    card_logs = ft.Container(bgcolor="#0D0E11", border=ft.Border.all(1, "#262930"), border_radius=10, padding=10, expand=True, content=lista_logs)
+    card_logs = ft.Container(bgcolor="#0D0E11", border=ft.border.all(1, "#262930"), border_radius=10, padding=10, expand=True, content=lista_logs)
 
     page.add(
         ft.Row([ft.Text("ABW-Converter", size=18, weight=ft.FontWeight.BOLD, color="#CE93D8"), ft.Row([txt_subtitulo, btn_lang], spacing=4)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
@@ -676,10 +677,6 @@ def main(page: ft.Page):
             arq_teste.write_text("ok", encoding="utf-8")
             arq_teste.unlink()
         except Exception:
-            def fechar_perm(e):
-                dlg_perm.open = False
-                page.update()
-
             dlg_perm = ft.AlertDialog(
                 modal=True,
                 title=ft.Text(tr("perm_title")),
@@ -687,13 +684,13 @@ def main(page: ft.Page):
                     tr("perm_desc") + "\n\n(Configurações > Apps > ABW-Converter > Acesso a todos os arquivos)",
                     size=13,
                 ),
-                actions=[ft.Button(content=ft.Text("OK"), on_click=fechar_perm)],
+                actions=[ft.ElevatedButton(content=ft.Text("OK"), on_click=lambda e: page.close(dlg_perm))],
             )
-            page.show_dialog(dlg_perm)
+            page.open(dlg_perm)
 
     verificar_permissao_android()
     log_msg(f"[✓] {tr('ready')}", "sucesso")
 
 
 if __name__ == "__main__":
-    ft.run(main)
+    ft.app(target=main)
