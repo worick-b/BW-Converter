@@ -670,18 +670,24 @@ def main(page: ft.Page):
         if not sdcard.exists():
             return
         try:
-            os.listdir(sdcard / "Download")
-        except PermissionError:
-            async def abrir_config_perm(e):
+            pasta_teste = sdcard / "abw"
+            pasta_teste.mkdir(parents=True, exist_ok=True)
+            arq_teste = pasta_teste / ".perm_check"
+            arq_teste.write_text("ok", encoding="utf-8")
+            arq_teste.unlink()
+        except Exception:
+            def fechar_perm(e):
                 dlg_perm.open = False
                 page.update()
-                await page.launch_url("package:com.abw.converter")
 
             dlg_perm = ft.AlertDialog(
                 modal=True,
                 title=ft.Text(tr("perm_title")),
-                content=ft.Text(tr("perm_desc"), size=13),
-                actions=[ft.Button(content=ft.Text(tr("perm_btn")), on_click=abrir_config_perm)],
+                content=ft.Text(
+                    tr("perm_desc") + "\n\n(Configurações > Apps > ABW-Converter > Acesso a todos os arquivos)",
+                    size=13,
+                ),
+                actions=[ft.Button(content=ft.Text("OK"), on_click=fechar_perm)],
             )
             page.show_dialog(dlg_perm)
 
