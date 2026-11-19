@@ -16,17 +16,23 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Instalar dependências
+      - name: Instalar Flet CLI
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
-          
+          pip install flet==0.28.3
+
       - name: Configurar Cache do Gradle
         uses: gradle/actions/setup-gradle@v4
-        
-      - name: Gerar APKs base com Flet
+
+      - name: Gerar APKs limpos por arquitetura (arm64 e armv7)
         run: |
-          flet build apk --arch arm64-v8a --arch armeabi-v7a --split-per-abi --compile-app --compile-packages
+          mkdir -p out_apks
+          flet build apk --arch arm64-v8a --compile-app --compile-packages
+          cp build/apk/*.apk out_apks/abetterway-converter-arm64-v8a.apk
+
+          rm -rf build/apk build/flutter
+          flet build apk --arch armeabi-v7a --compile-app --compile-packages
+          cp build/apk/*.apk out_apks/abetterway-converter-armeabi-v7a.apk
 
       - name: Ativar extractNativeLibs e injetar FFmpeg 8.1
         env:
@@ -41,60 +47,45 @@ jobs:
 
           cat << 'EOF' > patch_axml.py
           import sys, struct
-          data = bytearray(open(sys.argv[1], "rb").read())
-          # ID oficial do atributo android:extractNativeLibs (0x010104ea)
+          data = bytearray(open(sys.argv, "rb").read())
           res_id = struct.pack("<I", 0x010104ea)
           idx = data.find(res_id)
           if idx != -1:
-              # Avanca ate os atributos XML (cada atributo AXML tem 20 bytes)
               pos = data.find(b"\x02\x01\x10\x00")
               while pos != -1 and pos + 36 < len(data):
-                  attr_count = struct.unpack_from("<H", data, pos + 28)[0]
+                  attr_count = struct.unpack_from("<H", data, pos + 28)
                   attr_off = pos + 36
                   for i in range(attr_count):
                       entry = attr_off + i * 20
                       if entry + 20 <= len(data):
-                          name_idx = struct.unpack_from("<I", data, entry + 4)[0]
+                          name_idx = struct.unpack_from("<I", data, entry + 4)
                           val_type = data[entry + 15]
-                          val_data = struct.unpack_from("<I", data, entry + 16)[0]
+                          val_data = struct.unpack_from("<I", data, entry + 16)
                           if val_type == 0x12 and val_data == 0:
-                              # Verifica se o nome corresponde ao res_id
                               id_pos = idx - name_idx * 4
                               if id_pos >= 0 and data[id_pos:id_pos+4] == res_id:
                                   struct.pack_into("<I", data, entry + 16, 0xFFFFFFFF)
-                                  print("extractNativeLibs alterado para TRUE!")
                   pos = data.find(b"\x02\x01\x10\x00", pos + 4)
-          open(sys.argv[1], "wb").write(data)
+          open(sys.argv, "wb").write(data)
           EOF
 
           BUILD_TOOLS=$(ls -d /usr/local/lib/android/sdk/build-tools/* | sort -V | tail -n 1)
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=ABW,O=ABW,C=BR"
 
-          for apk in build/apk/*arm64-v8a*.apk; do
-            unzip -o "$apk" AndroidManifest.xml -d inj_v8/
-            python patch_axml.py inj_v8/AndroidManifest.xml
-            (cd inj_v8 && zip -0 -r "$OLDPWD/$apk" AndroidManifest.xml lib/)
+          for pair in "out_apks/abetterway-converter-arm64-v8a.apk:inj_v8" "out_apks/abetterway-converter-armeabi-v7a.apk:inj_v7"; do
+            apk="${pair%%:*}"
+            dir="${pair##*:}"
+            unzip -o "$apk" AndroidManifest.xml -d "$dir/"
+            python patch_axml.py "$dir/AndroidManifest.xml"
+            (cd "$dir" && zip -0 -r "$OLDPWD/$apk" AndroidManifest.xml lib/)
             "$BUILD_TOOLS/zipalign" -f -p 4 "$apk" "${apk}.aligned"
             "$BUILD_TOOLS/apksigner" sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out "$apk" "${apk}.aligned"
-            rm -f "${apk}.aligned" inj_v8/AndroidManifest.xml
+            rm -f "${apk}.aligned" "$dir/AndroidManifest.xml"
           done
-
-          for apk in build/apk/*armeabi-v7a*.apk; do
-            unzip -o "$apk" AndroidManifest.xml -d inj_v7/
-            python patch_axml.py inj_v7/AndroidManifest.xml
-            (cd inj_v7 && zip -0 -r "$OLDPWD/$apk" AndroidManifest.xml lib/)
-            "$BUILD_TOOLS/zipalign" -f -p 4 "$apk" "${apk}.aligned"
-            "$BUILD_TOOLS/apksigner" sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android --out "$apk" "${apk}.aligned"
-            rm -f "${apk}.aligned" inj_v7/AndroidManifest.xml
-          done
-
-          mv build/apk/app-arm64-v8a-release.apk build/apk/abetterway-converter-arm64-v8a.apk
-          mv build/apk/app-armeabi-v7a-release.apk build/apk/abetterway-converter-armeabi-v7a.apk
-          rm -f build/apk/app-x86_64-release.apk
 
       - name: Publicar APKs na aba Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1.0
-          name: ABW-Converter v1.1.0
-          files: build/apk/*.apk
+          tag_name: v1.1.5
+          name: ABW-Converter v1.1.5
+          files: out_apks/*.apk
