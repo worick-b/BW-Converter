@@ -1,35 +1,14 @@
 [project]
 name = "abetterway-converter"
-version = "1.1.0"
-description = "ABetterWay - Converter"
+version = "1.1.5"
+description = "FFmpeg 8.1 Audio & Video Converter"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [
-    { name = "ABW", email = "ABW@local" }
-]
 dependencies = [
-    "flet>=1.1.2",
-    "certifi"
-]
-
-[dependency-groups]
-dev = [
-    "flet-cli>=1.1.2",
-    "flet-desktop>=1.1.2",
-    "flet-web>=1.1.2",
-    "flet[test]>=1.1.2",
+  "flet==0.28.3",
+  "certifi",
 ]
 
 [tool.flet]
 org = "com.abw.converter"
-product = "ABW Converter"
-company = "ABW"
-copyright = "Copyright (C) 2026 by ABW"
-
-[tool.flet.app]
-path = "src"
-
-[tool.flet.android.permission]
-"android.permission.READ_EXTERNAL_STORAGE" = true
-"android.permission.WRITE_EXTERNAL_STORAGE" = true
-"android.permission.MANAGE_EXTERNAL_STORAGE" = true
+product = "ABW-Converter"
