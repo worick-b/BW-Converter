@@ -21,28 +21,26 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Gerar APKs com FFmpeg 8.1 nativo
+      - name: Preparar template Android com FFmpeg 8.1 e gerar APKs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           flet build apk --arch arm64-v8a --arch armeabi-v7a --split-per-abi --compile-app --compile-packages --yes
 
+          cp -r build/flutter meu_template
+          rm -rf build
+
           gh release download -R xonev8/FFmpeg-Android-HEAAC -p "*arm64-v8a*.zip" -O v8.zip
           gh release download -R xonev8/FFmpeg-Android-HEAAC -p "*armeabi-v7a*.zip" -O v7.zip
 
-          mkdir -p build/flutter/android/app/src/main/jniLibs/arm64-v8a
-          mkdir -p build/flutter/android/app/src/main/jniLibs/armeabi-v7a
-          unzip -j -o v8.zip "libffmpeg_bin.so" -d build/flutter/android/app/src/main/jniLibs/arm64-v8a/
-          unzip -j -o v7.zip "libffmpeg_bin.so" -d build/flutter/android/app/src/main/jniLibs/armeabi-v7a/
+          mkdir -p meu_template/android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p meu_template/android/app/src/main/jniLibs/armeabi-v7a
+          unzip -j -o v8.zip "libffmpeg_bin.so" -d meu_template/android/app/src/main/jniLibs/arm64-v8a/
+          unzip -j -o v7.zip "libffmpeg_bin.so" -d meu_template/android/app/src/main/jniLibs/armeabi-v7a/
 
-          sed -i 's/<application/<application android:extractNativeLibs="true"/g' build/flutter/android/app/src/main/AndroidManifest.xml
+          sed -i 's/<application/<application android:extractNativeLibs="true"/g' meu_template/android/app/src/main/AndroidManifest.xml
 
-          FLUTTER_BIN=$(find / -name "flutter" -type f -executable 2>/dev/null | head -n 1)
-          cd build/flutter && "$FLUTTER_BIN" build apk --release --split-per-abi
-
-          rm -f "$GITHUB_WORKSPACE/build/apk/"*.apk
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$GITHUB_WORKSPACE/build/apk/abetterway-converter-arm64-v8a.apk"
-          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "$GITHUB_WORKSPACE/build/apk/abetterway-converter-armeabi-v7a.apk"
+          flet build apk --template "file://$GITHUB_WORKSPACE/meu_template" --arch arm64-v8a --arch armeabi-v7a --split-per-abi --compile-app --compile-packages --yes
 
       - name: Publicar APKs na aba Releases
         uses: softprops/action-gh-release@v2
