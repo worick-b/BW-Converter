@@ -14,4 +14,5 @@ org = "com.abw.converter"
 product = "ABW-Converter"
 
 [tool.flet.app]
-source_dir = "src"
+path = "src"
+module = "main"
