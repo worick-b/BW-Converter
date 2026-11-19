@@ -1,4 +1,4 @@
-# ABW Converter - WORK IN PROGRESS, I'LL BE BACK! 🔥​🗿​
+# ABW Converter - WORK IN PROGRESS, I'LL BE BACK! ​🗿​
 ~Thunderstruck
 
 Lightweight, fast, and offline audio & video batch converter for Android powered by **FFmpeg 8.1**.
