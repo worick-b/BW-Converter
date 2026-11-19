@@ -26,7 +26,7 @@ Lightweight, fast, and offline audio & video batch converter for Android powered
 
 ---
 
-## Installation (Android)
+## Installation
 
 1. Go to the **[Releases](../../releases)** page and download the APK matching your device architecture:
    * **`arm64-v8a`**: Recommended for modern 64-bit Android devices (Android 10–14+).
