@@ -1,12 +1,11 @@
 [project]
 name = "abetterway-converter"
-version = "1.1.6"
+version = "1.1.8"
 description = "FFmpeg 8.1 Audio & Video Converter"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "flet==0.28.3",
-  "certifi",
 ]
 
 [tool.flet]
@@ -16,6 +15,7 @@ product = "ABW Converter"
 [tool.flet.app]
 path = "src"
 module = "main"
+exclude = ["**/__pycache__", "**/*.pyc", "**/*.pyo", "**/tests", "**/test"]
 
 [tool.flet.android]
 permission."android.permission.MANAGE_EXTERNAL_STORAGE" = true
