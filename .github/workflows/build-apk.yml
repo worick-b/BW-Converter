@@ -87,6 +87,6 @@ jobs:
       - name: Publicar APKs na aba Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.1
-          name: ABW Converter v1.2.1
+          tag_name: v1.2.2
+          name: ABW Converter v1.2.2
           files: out_apks/*.apk
