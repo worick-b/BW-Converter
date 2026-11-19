@@ -21,17 +21,14 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Extrair template local do Flet e injetar FFmpeg 8.1
+      - name: Gerar projeto base e injetar FFmpeg 8.1
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          python - << 'EOF'
-          import shutil, pathlib, flet_cli
-          tpl_src = next(pathlib.Path(flet_cli.__file__).resolve().parent.rglob("*template*"))
-          if tpl_src.is_file():
-              tpl_src = tpl_src.parent
-          shutil.copytree(tpl_src, "meu_template", dirs_exist_ok=True)
-          EOF
+          flet build apk --arch arm64-v8a --arch armeabi-v7a --split-per-abi --compile-app --compile-packages --yes
+
+          cp -r build/flutter meu_template
+          rm -rf build
 
           gh release download -R xonev8/FFmpeg-Android-HEAAC -p "*arm64-v8a*.zip" -O v8.zip
           gh release download -R xonev8/FFmpeg-Android-HEAAC -p "*armeabi-v7a*.zip" -O v7.zip
@@ -52,13 +49,11 @@ jobs:
           tree.write(manifest, encoding="utf-8", xml_declaration=True)
           EOF
 
-      - name: Gerar APKs finais com Flet
-        run: |
           flet build apk --template "file://$GITHUB_WORKSPACE/meu_template" --arch arm64-v8a --arch armeabi-v7a --split-per-abi --compile-app --compile-packages --yes
 
       - name: Publicar APKs na aba Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.7
-          name: ABW-Converter v1.0.7 (Android)
+          tag_name: v1.0.8
+          name: ABW-Converter v1.0.8 (Android)
           files: build/apk/*.apk
