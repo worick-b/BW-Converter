@@ -177,12 +177,7 @@ def obter_caminho_ffmpeg() -> str | None:
         if cand.exists():
             return str(cand)
 
-    pasta_src = Path(__file__).resolve().parent
-    for nome in (nome_so, "ffmpeg.exe", "ffmpeg"):
-        if (pasta_src / nome).exists():
-            return str(pasta_src / nome)
-
-    return shutil.which("ffmpeg")
+    return None
 
 
 def obter_duracao_segundos(bin_ffmpeg: str, caminho_arquivo: str) -> float:
@@ -229,7 +224,9 @@ def main(page: ft.Page):
 
     pasta_inicial = Path("/storage/emulated/0/Download")
     if not pasta_inicial.exists():
-        pasta_inicial = Path("/storage/emulated/0") if Path("/storage/emulated/0").exists() else Path.home()
+        pasta_inicial = Path("/storage/emulated/0")
+    if not pasta_inicial.exists():
+        pasta_inicial = Path.home()
 
     estado = {
         "lang": detectar_idioma(page),
@@ -319,17 +316,14 @@ def main(page: ft.Page):
         if e.files:
             arq_escolhido = next(iter(e.files))
             if not arq_escolhido.path:
-                log_msg("[-] Caminho do arquivo inválido.", "erro")
                 return
             caminho_arq = Path(arq_escolhido.path).resolve()
             estado["arquivo_unico"] = caminho_arq
             txt_alvo.value = tr("mode_single", name=caminho_arq.name)
             txt_alvo.color = "#FFD54F"
-
             if "cache" not in str(caminho_arq).lower() and "/data/" not in str(caminho_arq):
                 estado["pasta"] = caminho_arq.parent
                 txt_pasta.value = str(estado["pasta"])
-
             page.update()
 
     def on_importar_result(e: ft.FilePickerResultEvent):
@@ -359,7 +353,6 @@ def main(page: ft.Page):
     seletor_pasta = ft.FilePicker(on_result=on_pasta_result)
     seletor_arquivo = ft.FilePicker(on_result=on_arquivo_result)
     seletor_importar = ft.FilePicker(on_result=on_importar_result)
-
     def on_exportar_result(e: ft.FilePickerResultEvent):
         if e.path:
             try:
@@ -423,9 +416,6 @@ def main(page: ft.Page):
             try:
                 if estado["arquivo_unico"]:
                     arq_sel = estado["arquivo_unico"]
-                    if not arq_sel.exists():
-                        log_msg(f"[-] Arquivo não encontrado: {arq_sel.name}", "erro")
-                        return
                     arquivos = [arq_sel]
                     if "cache" in str(arq_sel).lower() or "/data/" in str(arq_sel):
                         arq_cache_limpar = arq_sel
@@ -450,19 +440,12 @@ def main(page: ft.Page):
                     return
 
                 pasta_saida = pasta_base / "conv_abw"
-                try:
-                    pasta_saida.mkdir(parents=True, exist_ok=True)
-                except PermissionError:
-                    log_msg(f"[-] Sem permissão em: {pasta_saida}", "erro")
-                    page.open(dlg_perm)
-                    return
-
+                pasta_saida.mkdir(parents=True, exist_ok=True)
                 pasta_tmp = obter_pasta_privada() / "abw_tmp"
                 pasta_tmp.mkdir(parents=True, exist_ok=True)
 
                 log_msg(tr("starting", n=total), "titulo")
                 log_msg(f"    Preset: {preset['nome']}", "info")
-                log_msg(f"    Destino: {pasta_saida}", "info")
 
                 ok_count = 0
                 for i, arq in enumerate(arquivos, 1):
@@ -480,7 +463,7 @@ def main(page: ft.Page):
                         "-progress", "pipe:1", "-i", entrada_cmd
                     ] + args_extras + [str(destino_ascii)]
 
-                    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="ignore")
+                    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="ignore")
                     ultimo_pct = -1
 
                     if proc.stdout:
@@ -509,10 +492,9 @@ def main(page: ft.Page):
                         shutil.move(str(destino_ascii), str(destino_final))
                         ok_count += 1
                     else:
-                        err_out = (proc.stderr.read() if proc.stderr else "").strip()
                         if destino_ascii.exists():
                             destino_ascii.unlink()
-                        log_msg(f"  [!] Falha #{i}/{total}: {err_out[:80]}", "erro")
+                        log_msg(f"  [!] #{i}/{total}", "erro")
 
                     set_progresso(i / total, tr("done_item", i=i, t=total))
 
