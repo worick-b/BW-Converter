@@ -89,4 +89,5 @@ jobs:
         with:
           tag_name: v1.2.4
           name: ABW Converter v1.2.4
+          draft: true
           files: out_apks/*.apk
