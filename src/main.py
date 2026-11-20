@@ -508,167 +508,172 @@ def main(page: ft.Page):
 
     # --- Motor de Conversão FFmpeg JNI (Cache Rápido + Exportação conv_abw) ---
     def iniciar_conversao_click(e):
-        if estado["ocupado"]:
-            log_msg(tr("wait"), "aviso")
-            return
+        try:
+            if estado["ocupado"]:
+                log_msg(tr("wait"), "aviso")
+                return
 
-        lib_jni = obter_lib_ffmpeg_jni()
-        if not lib_jni:
-            log_msg(tr("no_ffmpeg"), "erro")
-            return
+            lista_logs.controls.clear()
+            log_msg("[1] Buscando libffmpeg_jni.so...", "info")
 
-        preset = next(
-            (p for idx, p in enumerate(estado["presets"]) if idx == int(dd_presets.value or 0)),
-            next(iter(estado["presets"])),
-        )
-        ext_saida = preset.get("ext", ".mp4").strip()
-        if not ext_saida.startswith("."):
-            ext_saida = "." + ext_saida
-        args_extras = shlex.split(preset.get("args", ""))
+            lib_jni = obter_lib_ffmpeg_jni()
+            if not lib_jni:
+                log_msg(tr("no_ffmpeg"), "erro")
+                return
 
-        estado["cancelar"] = False
-        atualizar_estado_ocupado(True)
-        lista_logs.controls.clear()
-        set_progresso(0, tr("preparing"))
+            log_msg("[2] Biblioteca carregada! Lendo preset...", "info")
+            idx_sel = int(dd_presets.value) if dd_presets.value is not None else 0
+            preset = estado["presets"][idx_sel] if 0 <= idx_sel < len(estado["presets"]) else estado["presets"]
 
-        def worker():
-            caches_limpar = []
-            pasta_cache = obter_cache_rapido()
-            try:
-                if estado["arquivos_selecionados"]:
-                    arquivos = list(estado["arquivos_selecionados"])
-                else:
-                    pasta_base_lote = estado["pasta"]
-                    exts_ignorar = {".json", ".txt", ".py", ".apk", ".zip", ".rar", ".7z", ".log", ".ini"}
-                    arquivos = sorted(
-                        [a for a in pasta_base_lote.iterdir() if a.is_file() and a.suffix.lower() not in exts_ignorar],
-                        key=lambda x: x.name.lower(),
-                    )
+            ext_saida = preset.get("ext", ".mp4").strip()
+            if not ext_saida.startswith("."):
+                ext_saida = "." + ext_saida
+            args_extras = shlex.split(preset.get("args", ""))
 
-                total = len(arquivos)
-                if total == 0:
-                    if str(estado["pasta"]).startswith("/storage/emulated/0") and not tem_acesso_total_arquivos():
-                        log_msg(f"[-] {tr('perm_title')}", "erro")
-                        page.open(dlg_perm)
+            estado["cancelar"] = False
+            atualizar_estado_ocupado(True)
+            set_progresso(0, tr("preparing"))
+
+            def worker():
+                caches_limpar = []
+                pasta_cache = obter_cache_rapido()
+                try:
+                    if estado["arquivos_selecionados"]:
+                        arquivos = list(estado["arquivos_selecionados"])
                     else:
-                        log_msg(tr("no_media"), "erro")
-                    return
+                        pasta_base_lote = estado["pasta"]
+                        exts_ignorar = {".json", ".txt", ".py", ".apk", ".zip", ".rar", ".7z", ".log", ".ini"}
+                        arquivos = sorted(
+                            [a for a in pasta_base_lote.iterdir() if a.is_file() and a.suffix.lower() not in exts_ignorar],
+                            key=lambda x: x.name.lower(),
+                        )
 
-                log_msg(tr("starting", n=total), "titulo")
-                log_msg(f"    Preset: {preset['nome']}", "info")
+                    total = len(arquivos)
+                    if total == 0:
+                        if str(estado["pasta"]).startswith("/storage/emulated/0") and not tem_acesso_total_arquivos():
+                            log_msg(f"[-] {tr('perm_title')}", "erro")
+                            page.open(dlg_perm)
+                        else:
+                            log_msg(tr("no_media"), "erro")
+                        return
 
-                ok_count = 0
-                for i, arq in enumerate(arquivos, 1):
-                    if estado["cancelar"]:
-                        break
+                    log_msg(tr("starting", n=total), "titulo")
+                    log_msg(f"    Preset: {preset['nome']}", "info")
 
-                    if "cache" in str(arq).lower() or "/data/" in str(arq):
-                        caches_limpar.append(arq)
-                        tam = arq.stat().st_size if arq.exists() else 0
-                        pasta_destino_base = encontrar_pasta_original(arq.name, tam, estado["pasta"])
-                    else:
-                        pasta_destino_base = arq.parent
+                    ok_count = 0
+                    for i, arq in enumerate(arquivos, 1):
+                        if estado["cancelar"]:
+                            break
 
-                    pasta_saida = pasta_destino_base / "conv_abw"
-                    pasta_saida.mkdir(parents=True, exist_ok=True)
+                        if "cache" in str(arq).lower() or "/data/" in str(arq):
+                            caches_limpar.append(arq)
+                            tam = arq.stat().st_size if arq.exists() else 0
+                            pasta_destino_base = encontrar_pasta_original(arq.name, tam, estado["pasta"])
+                        else:
+                            pasta_destino_base = arq.parent
 
-                    nome_curto = arq.name if len(arq.name) <= 20 else arq.name[:17] + "..."
-                    set_progresso((i - 1) / total, tr("converting", i=i, t=total, name=nome_curto, pct=0))
+                        pasta_saida = pasta_destino_base / "conv_abw"
+                        pasta_saida.mkdir(parents=True, exist_ok=True)
 
-                    destino_final = pasta_saida / f"{arq.stem}{ext_saida}"
-                    destino_cache = pasta_cache / f"out_{i}{ext_saida}"
-                    arq_prog = pasta_cache / f"prog_{i}.txt"
-                    entrada_cmd = str(arq)
+                        nome_curto = arq.name if len(arq.name) <= 20 else arq.name[:17] + "..."
+                        set_progresso((i - 1) / total, tr("converting", i=i, t=total, name=nome_curto, pct=0))
 
-                    if destino_cache.exists():
-                        destino_cache.unlink()
-                    if arq_prog.exists():
-                        arq_prog.unlink()
+                        destino_final = pasta_saida / f"{arq.stem}{ext_saida}"
+                        destino_cache = pasta_cache / f"out_{i}{ext_saida}"
+                        arq_prog = pasta_cache / f"prog_{i}.txt"
+                        entrada_cmd = str(arq)
 
-                    duracao_total = obter_duracao_segundos(lib_jni, entrada_cmd, pasta_cache)
-                    concluido_item = threading.Event()
-
-                    def monitorar_progresso():
-                        ultimo_pct = -2
-                        while not conclu_item.is_set() and not estado["cancelar"]:
-                            if arq_prog.exists() and duracao_total > 0:
-                                try:
-                                    linhas = arq_prog.read_text(encoding="utf-8", errors="ignore").splitlines()
-                                    for linha in reversed(linhas):
-                                        if linha.startswith("out_time_us="):
-                                            us = int(linha.split("=", 1)[1])
-                                            seg_atual = us / 1_000_000.0
-                                            pct_item = max(0, min(99, int((seg_atual / duracao_total) * 100)))
-                                            if abs(pct_item - ultimo_pct) >= 2:
-                                                ultimo_pct = pct_item
-                                                prog_global = ((i - 1) + (pct_item / 100.0)) / total
-                                                set_progresso(
-                                                    prog_global,
-                                                    tr("converting", i=i, t=total, name=nome_curto, pct=pct_item),
-                                                )
-                                            break
-                                except Exception:
-                                    pass
-                            time.sleep(0.35)
-
-                    t_mon = threading.Thread(target=monitorar_progresso, daemon=True)
-                    t_mon.start()
-
-                    args_cmd = [
-                        "-y", "-v", "error", "-nostats",
-                        "-progress", str(arq_prog),
-                        "-i", entrada_cmd,
-                    ] + args_extras + [str(destino_cache)]
-
-                    ret_code = executar_ffmpeg_jni(lib_jni, args_cmd)
-                    concluido_item.set()
-                    t_mon.join(timeout=1.0)
-
-                    if arq_prog.exists():
-                        try:
+                        if destino_cache.exists():
+                            destino_cache.unlink()
+                        if arq_prog.exists():
                             arq_prog.unlink()
-                        except Exception:
-                            pass
+
+                        duracao_total = obter_duracao_segundos(lib_jni, entrada_cmd, pasta_cache)
+                        concluido_item = threading.Event()
+
+                        def monitorar_progresso():
+                            ultimo_pct = -2
+                            while not conclu_item.is_set() and not estado["cancelar"]:
+                                if arq_prog.exists() and duracao_total > 0:
+                                    try:
+                                        linhas = arq_prog.read_text(encoding="utf-8", errors="ignore").splitlines()
+                                        for linha in reversed(linhas):
+                                            if linha.startswith("out_time_us="):
+                                                us = int(linha.split("=", 1))
+                                                seg_atual = us / 1_000_000.0
+                                                pct_item = max(0, min(99, int((seg_atual / duracao_total) * 100)))
+                                                if abs(pct_item - ultimo_pct) >= 2:
+                                                    ultimo_pct = pct_item
+                                                    prog_global = ((i - 1) + (pct_item / 100.0)) / total
+                                                    set_progresso(
+                                                        prog_global,
+                                                        tr("converting", i=i, t=total, name=nome_curto, pct=pct_item),
+                                                    )
+                                                break
+                                    except Exception:
+                                        pass
+                                time.sleep(0.35)
+
+                        t_mon = threading.Thread(target=monitorar_progresso, daemon=True)
+                        t_mon.start()
+
+                        args_cmd = [
+                            "-y", "-v", "error", "-nostats",
+                            "-progress", str(arq_prog),
+                            "-i", entrada_cmd,
+                        ] + args_extras + [str(destino_cache)]
+
+                        ret_code = executar_ffmpeg_jni(lib_jni, args_cmd)
+                        concluido_item.set()
+                        t_mon.join(timeout=1.0)
+
+                        if arq_prog.exists():
+                            try:
+                                arq_prog.unlink()
+                            except Exception:
+                                pass
+
+                        if estado["cancelar"]:
+                            if destino_cache.exists():
+                                destino_cache.unlink()
+                            break
+
+                        if ret_code == 0 and destino_cache.exists() and destino_cache.stat().st_size > 0:
+                            if destino_final.exists():
+                                destino_final.unlink()
+                            shutil.move(str(destino_cache), str(destino_final))
+                            ok_count += 1
+                        else:
+                            if destino_cache.exists():
+                                destino_cache.unlink()
+                            log_msg(f"  [!] Falha #{i}/{total} (code={ret_code})", "erro")
+
+                        set_progresso(i / total, tr("done_item", i=i, t=total))
 
                     if estado["cancelar"]:
-                        if destino_cache.exists():
-                            destino_cache.unlink()
-                        break
-
-                    if ret_code == 0 and destino_cache.exists() and destino_cache.stat().st_size > 0:
-                        if destino_final.exists():
-                            destino_final.unlink()
-                        shutil.move(str(destino_cache), str(destino_final))
-                        ok_count += 1
+                        log_msg(tr("canceled"), "aviso")
                     else:
-                        if destino_cache.exists():
-                            destino_cache.unlink()
-                        log_msg(f"  [!] #{i}/{total}", "erro")
-
-                    set_progresso(i / total, tr("done_item", i=i, t=total))
-
-                if estado["cancelar"]:
-                    log_msg(tr("canceled"), "aviso")
-                else:
-                    log_msg(tr("finished", ok=ok_count, t=total), "sucesso")
-            except Exception as ex:
-                log_msg(f"[-] {ex}", "erro")
-            finally:
-                for arq_c in caches_limpar:
-                    if arq_c.exists():
+                        log_msg(tr("finished", ok=ok_count, t=total), "sucesso")
+                except Exception as ex:
+                    log_msg(f"[-] Erro worker: {ex}", "erro")
+                finally:
+                    for arq_c in caches_limpar:
+                        if arq_c.exists():
+                            try:
+                                arq_c.unlink()
+                            except Exception:
+                                pass
+                    for tmp_arq in pasta_cache.glob("*"):
                         try:
-                            arq_c.unlink()
+                            tmp_arq.unlink()
                         except Exception:
                             pass
-                for tmp_arq in pasta_cache.glob("*"):
-                    try:
-                        tmp_arq.unlink()
-                    except Exception:
-                        pass
-                atualizar_estado_ocupado(False)
-                set_progresso(0.0 if estado["cancelar"] else 1.0, tr("status_ready"))
+                    atualizar_estado_ocupado(False)
+                    set_progresso(0.0 if estado["cancelar"] else 1.0, tr("status_ready"))
 
-        threading.Thread(target=worker, daemon=True).start()
+            threading.Thread(target=worker, daemon=True).start()
+        except Exception as err_click:
+            log_msg(f"[-] Erro click: {err_click}", "erro")
 
     # --- Gerenciador de Presets (AlertDialog) ---
     inp_nome = ft.TextField(label=tr("name_lbl"), dense=True, text_size=13)
