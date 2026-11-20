@@ -213,9 +213,33 @@ def obter_lib_ffmpeg_jni():
     lib = ctypes.CDLL(caminho)
     lib.run_ffmpeg.argtypes = [ctypes.c_int, ctypes.POINTER(ctypes.c_char_p)]
     lib.run_ffmpeg.restype = ctypes.c_int
+
+    # Injeta a JavaVM ativa do processo Android no FFmpeg (para MediaCodec funcionar)
+    try:
+        lib.av_jni_set_java_vm.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        lib.av_jni_set_java_vm.restype = ctypes.c_int
+        for vm_lib_name in ("libart.so", "libnativehelper.so", "libandroid_runtime.so"):
+            try:
+                vm_lib = ctypes.CDLL(vm_lib_name)
+                if hasattr(vm_lib, "JNI_GetCreatedJavaVMs"):
+                    vm_lib.JNI_GetCreatedJavaVMs.argtypes = [
+                        ctypes.POINTER(ctypes.c_void_p),
+                        ctypes.c_int,
+                        ctypes.POINTER(ctypes.c_int),
+                    ]
+                    vm_lib.JNI_GetCreatedJavaVMs.restype = ctypes.c_int
+                    vms = (ctypes.c_void_p * 1)()
+                    n_vms = ctypes.c_int(0)
+                    if vm_lib.JNI_GetCreatedJavaVMs(vms, 1, ctypes.byref(n_vms)) == 0 and n_vms.value > 0:
+                        lib.av_jni_set_java_vm(vms[0], None)
+                        break
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     _ffmpeg_jni_lib = lib
     return _ffmpeg_jni_lib
-
 
 def executar_ffmpeg_jni(lib, args: list[str]) -> int:
     cmd = ["ffmpeg"] + args
