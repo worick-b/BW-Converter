@@ -10,7 +10,8 @@ dependencies = [
 ]
 
 [tool.flet]
-org = "com.abw.converter"
+org = "com.abw"
+project = "converter"
 product = "ABW Converter"
 
 [tool.flet.app]
