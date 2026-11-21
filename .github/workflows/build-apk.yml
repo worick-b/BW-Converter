@@ -23,23 +23,25 @@ jobs:
           packages: platform-tools
 
       - name: Baixar e instalar FFmpeg 8.1 + MKVToolNix em jniLibs
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p app/src/main/jniLibs/arm64-v8a
           mkdir -p app/src/main/jniLibs/armeabi-v7a
-          mkdir -p tmp_bins
+          mkdir -p tmp_bins/ff_v8 tmp_bins/ff_v7 tmp_bins/mkv_v8 tmp_bins/mkv_v7
 
-          # FFmpeg 8.1 Static (arm64-v8a e armeabi-v7a)
-          curl -fL -o tmp_bins/ff_v8.zip "https://github.com/xonev8/FFmpeg-Android"
-          curl -fL -o tmp_bins/ff_v7.zip "https://github.com/xonev8/FFmpeg-Android"
+          # Baixar FFmpeg 8.1 Static (repositório FFmpeg-Android, tag v8.1-android)
+          gh release download v8.1-android -R xonev8/FFmpeg-Android -p "*arm64-v8a*.zip" -O tmp_bins/ff_v8.zip
+          gh release download v8.1-android -R xonev8/FFmpeg-Android -p "*armeabi-v7a*.zip" -O tmp_bins/ff_v7.zip
 
           unzip -o tmp_bins/ff_v8.zip -d tmp_bins/ff_v8
           unzip -o tmp_bins/ff_v7.zip -d tmp_bins/ff_v7
           cp -f tmp_bins/ff_v8/libffmpeg_bin.so app/src/main/jniLibs/arm64-v8a/libffmpeg_bin.so
           cp -f tmp_bins/ff_v7/libffmpeg_bin.so app/src/main/jniLibs/armeabi-v7a/libffmpeg_bin.so
 
-          # MKVToolNix 57.0.0 Static (arm64-v8a e armeabi-v7a)
-          curl -fL -o tmp_bins/mkv_v8.zip "https://github.com/xonev8/MKVToolNix-Android"
-          curl -fL -o tmp_bins/mkv_v7.zip "https://github.com/xonev8/MKVToolNix-Android"
+          # Baixar MKVToolNix 57.0.0 Static (repositório MKVToolNix-Android, tag v1.0-android-mkvmerge)
+          gh release download v1.0-android-mkvmerge -R xonev8/MKVToolNix-Android -p "*arm64-v8a*.zip" -O tmp_bins/mkv_v8.zip
+          gh release download v1.0-android-mkvmerge -R xonev8/MKVToolNix-Android -p "*armeabi-v7a*.zip" -O tmp_bins/mkv_v7.zip
 
           unzip -o tmp_bins/mkv_v8.zip -d tmp_bins/mkv_v8
           unzip -o tmp_bins/mkv_v7.zip -d tmp_bins/mkv_v7
