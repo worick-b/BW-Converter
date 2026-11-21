@@ -481,7 +481,7 @@ def main(page: ft.Page):
                     log_msg(tr("no_ffmpeg"), "erro")
                     return
                 idx_sel = int(dd_presets.value) if dd_presets.value is not None else 0
-                preset = estado["presets"][idx_sel] if 0 <= idx_sel < len(estado["presets"]) else estado["presets"][0]
+                preset = estado["presets"][idx_sel] if 0 <= idx_sel < len(estado["presets"]) else estado["presets"]
                 ext_saida = preset.get("ext", ".mp4").strip()
                 if not ext_saida.startswith("."):
                     ext_saida = "." + ext_saida
@@ -527,24 +527,29 @@ def main(page: ft.Page):
                             break
 
                         saida_mkv = ""
-                        if "cache" in str(arq).lower() or "/data/" in str(arq):
+                        stderr_ff = ""
+                        eh_cache = ("cache" in str(arq).lower() or "/data/" in str(arq))
+                        if eh_cache:
                             caches_limpar.append(arq)
-                            tam = arq.stat().st_size if arq.exists() else 0
-                            pasta_destino_base = encontrar_pasta_original(arq.name, tam, estado["pasta"])
-                        else:
-                            pasta_destino_base = arq.parent
 
-                        pasta_saida = pasta_destino_base / "conv_abw"
+                        arq_original = encontrar_arquivo_original(arq, estado["pasta"])
+                        pasta_saida = arq_original.parent / "conv_abw"
                         pasta_saida.mkdir(parents=True, exist_ok=True)
 
-                        nome_curto = arq.name if len(arq.name) <= 20 else arq.name[:17] + "..."
+                        fonte_real = arq_original if arq_original.exists() else arq
+                        if not fonte_real.exists():
+                            log_msg(f"  [!] #{i}/{total} Arquivo inacessível", "erro")
+                            continue
+
+                        nome_curto = arq_original.name if len(arq_original.name) <= 20 else arq_original.name[:17] + "..."
                         set_progresso((i - 1) / total, tr("converting", i=i, t=total, name=nome_curto, pct=0))
 
-                        destino_final = pasta_saida / f"{arq.stem}{ext_saida}"
+                        destino_final = pasta_saida / f"{arq_original.stem}{ext_saida}"
                         destino_ascii = pasta_tmp / f"out_{i}{ext_saida}"
                         if destino_ascii.exists():
                             destino_ascii.unlink()
-                        entrada_cmd = str(arq)
+
+                        entrada_cmd = str(fonte_real)
 
                         if modo == "mkvmerge":
                             env_mkv = os.environ.copy()
@@ -580,7 +585,7 @@ def main(page: ft.Page):
                             ] + args_extras + [str(destino_ascii)]
 
                             proc = subprocess.Popen(
-                                cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="ignore"
+                                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="ignore"
                             )
                             estado["proc_atual"] = proc
                             ultimo_pct = -2
@@ -592,7 +597,7 @@ def main(page: ft.Page):
                                     linha = linha.strip()
                                     if linha.startswith("out_time_us=") and duracao_total > 0:
                                         try:
-                                            us = int(linha.split("=", 1)[1])
+                                            us = int(linha.split("=", 1))
                                             seg_atual = us / 1_000_000.0
                                             pct_item = max(0, min(99, int((seg_atual / duracao_total) * 100)))
                                             if abs(pct_item - ultimo_pct) >= 2:
@@ -605,6 +610,7 @@ def main(page: ft.Page):
                                         except Exception:
                                             pass
 
+                            stderr_ff = (proc.stderr.read() if proc.stderr else "").strip()
                             proc.wait()
 
                         estado["proc_atual"] = None
@@ -625,8 +631,9 @@ def main(page: ft.Page):
                             if destino_ascii.exists():
                                 destino_ascii.unlink()
                             log_msg(f"  [!] #{i}/{total} (code={proc.returncode})", "erro")
-                            if modo == "mkvmerge" and saida_mkv:
-                                ultima = saida_mkv.splitlines()[-1].split("\r")[-1].strip()
+                            err_txt = saida_mkv if modo == "mkvmerge" else stderr_ff
+                            if err_txt:
+                                ultima = err_txt.splitlines()[-1].split("\r")[-1].strip()
                                 log_msg(f"      {ultima[:120]}", "aviso")
 
                         set_progresso(i / total, tr("done_item", i=i, t=total))
@@ -648,7 +655,6 @@ def main(page: ft.Page):
                         try:
                             tmp_arq.unlink()
                         except Exception:
-                            pass
                     estado["proc_atual"] = None
                     atualizar_estado_ocupado(False, modo)
                     set_progresso(0.0 if estado["cancelar"] else 1.0, tr("status_ready"))
