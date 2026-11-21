@@ -44,8 +44,8 @@ private val TEXTOS_PT = mapOf(
     "folder_btn" to "Pasta",
     "mode_batch" to "Modo Lote: Toda a pasta de trabalho",
     "mode_single" to "Modo Único: {name}",
-    "mode_multi" to "Selecionados: {n} arquivo(s)",
-    "pick_file" to "Selecionar Arquivo(s)",
+    "mode_multi" to "Selecionados: {n} arquivos",
+    "pick_file" to "Modo Único: Selecionar Arquivos",
     "preset_lbl" to "Preset Ativo",
     "manage_tip" to "Gerenciar Presets",
     "start_btn" to "INICIAR CONVERSÃO",
@@ -187,10 +187,6 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
 
     fun addLog(msg: String, color: Color = Color(0xFFE0E0E0)) {
         logs.add(LogLine(msg, color))
-    }
-
-    LaunchedEffect(Unit) {
-        addLog("[✓] ${tr("ready")}", Color(0xFF81C784))
     }
 
     LaunchedEffect(logs.size) {
