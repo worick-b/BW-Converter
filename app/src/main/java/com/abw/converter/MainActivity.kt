@@ -707,6 +707,12 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
                     OutlinedTextField(value = argsInp, onValueChange = { argsInp = it }, label = { Text(tr("args_lbl"), fontSize = 12.sp) }, maxLines = 3)
 
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Button(onClick = {
                             val n = nomeInp.trim()
                             var e = extInp.trim()
@@ -733,13 +739,13 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
                             PresetsManager.salvarPresets(context, nova)
                             presets = nova
                             addLog(tr("restored"), Color(0xFF81C784))
-                        }) { Text(tr("restore"), fontSize = 11.sp) }
+                        }) { Text(tr("restore"), fontSize = 12.sp) }
 
                         TextButton(onClick = { importPicker.launch(arrayOf("application/json", "*/*")) }) {
-                            Text(tr("import"), fontSize = 11.sp)
+                            Text(tr("import"), fontSize = 12.sp)
                         }
                         TextButton(onClick = { exportPicker.launch(null) }) {
-                            Text(tr("export"), fontSize = 11.sp)
+                            Text(tr("export"), fontSize = 12.sp)
                         }
                     }
                 }
