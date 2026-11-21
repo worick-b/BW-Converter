@@ -200,7 +200,7 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
     // Seletores nativos do Android (sem cópia para o cache!)
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
         if (uri != null) {
-            val dir = MediaEngines.resolverUriParaArquivo(uri)
+            val dir = MediaEngines.resolverUriParaArquivo(context, uri)
             if (dir != null && dir.exists()) {
                 pastaTrabalho = dir
                 arquivosSelecionados = emptyList()
@@ -211,7 +211,7 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            val reais = uris.mapNotNull { MediaEngines.resolverUriParaArquivo(it) }.filter { it.exists() }
+            val reais = uris.mapNotNull { MediaEngines.resolverUriParaArquivo(context, it) }.filter { it.exists() }
             if (reais.isNotEmpty()) {
                 arquivosSelecionados = reais
             }
@@ -235,7 +235,7 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
 
     val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
         if (uri != null) {
-            val dir = MediaEngines.resolverUriParaArquivo(uri)
+            val dir = MediaEngines.resolverUriParaArquivo(context, uri)
             if (dir != null && dir.exists()) {
                 try {
                     val dest = File(dir, "abw_presets_exportados.json")
