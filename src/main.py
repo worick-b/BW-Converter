@@ -462,197 +462,200 @@ def main(page: ft.Page):
 
     # --- Motor de Conversão (FFmpeg) e Remux (MKVToolNix) ---
     def executar_lote(modo: str):
-        if estado["ocupado"]:
-            log_msg(tr("wait"), "aviso")
-            return
+        try:
+            if estado["ocupado"]:
+                log_msg(tr("wait"), "aviso")
+                return
 
-        if modo == "mkvmerge":
-                        env_mkv = os.environ.copy()
-                        env_mkv["LC_ALL"] = "C.UTF-8"
-                        env_mkv["LANG"] = "C.UTF-8"
-                        cmd = [bin_exec, "-o", str(destino_ascii), entrada_cmd]
-                        proc = subprocess.Popen(
-                            cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT,
-                            text=True,
-                            errors="ignore",
-                            env=env_mkv,
-                        )
-                        estado["proc_atual"] = proc
-                        ultimo_pct = -2
-                        linhas_mkv = []
-
-                        if proc.stdout:
-                            for linha in proc.stdout:
-                                if estado["cancelar"]:
-                                    break
-                                linha_limpa = linha.strip()
-                                if linha_limpa:
-                                    linhas_mkv.append(linha_limpa)
-                                m_prog = re.search(r"Progress:\s*(\d+)%", linha_limpa)
-                                if m_prog:
-                                    pct_item = max(0, min(99, int(m_prog.group(1))))
-                                    if abs(pct_item - ultimo_pct) >= 2:
-                                        ultimo_pct = pct_item
-                                        prog_global = ((i - 1) + (pct_item / 100.0)) / total
-                                        set_progresso(
-                                            prog_global,
-                                            tr("converting", i=i, t=total, name=nome_curto, pct=pct_item),
-                                        )
-
-        def worker():
-            caches_limpar = []
-            pasta_tmp = obter_pasta_privada() / "abw_tmp"
-            try:
-                if estado["arquivos_selecionados"]:
-                    arquivos = list(estado["arquivos_selecionados"])
-                else:
-                    pasta_base_lote = estado["pasta"]
-                    exts_ignorar = {".json", ".txt", ".py", ".apk", ".zip", ".rar", ".7z", ".log", ".ini"}
-                    arquivos = sorted(
-                        [a for a in pasta_base_lote.iterdir() if a.is_file() and a.suffix.lower() not in exts_ignorar],
-                        key=lambda x: x.name.lower(),
-                    )
-
-                total = len(arquivos)
-                if total == 0:
-                    if str(estado["pasta"]).startswith("/storage/emulated/0") and not tem_acesso_total_arquivos():
-                        log_msg(f"[-] {tr('perm_title')}", "erro")
-                        page.open(dlg_perm)
-                    else:
-                        log_msg(tr("no_media"), "erro")
+            if modo == "mkvmerge":
+                bin_exec = obter_caminho_binario("libmkvmerge_bin.so")
+                if not bin_exec:
+                    log_msg(tr("no_mkvmerge"), "erro")
                     return
+                ext_saida = ".mkv"
+                args_extras = []
+                nome_modo = "MKVToolNix (Remux MKV)"
+            else:
+                bin_exec = obter_caminho_binario("libffmpeg_bin.so")
+                if not bin_exec:
+                    log_msg(tr("no_ffmpeg"), "erro")
+                    return
+                idx_sel = int(dd_presets.value) if dd_presets.value is not None else 0
+                preset = estado["presets"][idx_sel] if 0 <= idx_sel < len(estado["presets"]) else estado["presets"][0]
+                ext_saida = preset.get("ext", ".mp4").strip()
+                if not ext_saida.startswith("."):
+                    ext_saida = "." + ext_saida
+                args_extras = shlex.split(preset.get("args", ""))
+                nome_modo = f"Preset: {preset['nome']}"
 
-                pasta_tmp.mkdir(parents=True, exist_ok=True)
-                log_msg(tr("starting", n=total), "titulo")
-                log_msg(f"    {nome_modo}", "info")
+            estado["cancelar"] = False
+            estado["proc_atual"] = None
+            atualizar_estado_ocupado(True, modo)
+            lista_logs.controls.clear()
+            set_progresso(0, tr("preparing"))
 
-                ok_count = 0
-                for i, arq in enumerate(arquivos, 1):
-                    if estado["cancelar"]:
-                        break
-
-                    if "cache" in str(arq).lower() or "/data/" in str(arq):
-                        caches_limpar.append(arq)
-                        tam = arq.stat().st_size if arq.exists() else 0
-                        pasta_destino_base = encontrar_pasta_original(arq.name, tam, estado["pasta"])
+            def worker():
+                caches_limpar = []
+                pasta_tmp = obter_pasta_privada() / "abw_tmp"
+                try:
+                    if estado["arquivos_selecionados"]:
+                        arquivos = list(estado["arquivos_selecionados"])
                     else:
-                        pasta_destino_base = arq.parent
-
-                    pasta_saida = pasta_destino_base / "conv_abw"
-                    pasta_saida.mkdir(parents=True, exist_ok=True)
-
-                    nome_curto = arq.name if len(arq.name) <= 20 else arq.name[:17] + "..."
-                    set_progresso((i - 1) / total, tr("converting", i=i, t=total, name=nome_curto, pct=0))
-
-                    destino_final = pasta_saida / f"{arq.stem}{ext_saida}"
-                    destino_ascii = pasta_tmp / f"out_{i}{ext_saida}"
-                    entrada_cmd = str(arq)
-
-                    if modo == "mkvmerge":
-                        cmd = [bin_exec, "--ui-language", "en", "-o", str(destino_ascii), entrada_cmd]
-                        proc = subprocess.Popen(
-                            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="ignore"
+                        pasta_base_lote = estado["pasta"]
+                        exts_ignorar = {".json", ".txt", ".py", ".apk", ".zip", ".rar", ".7z", ".log", ".ini"}
+                        arquivos = sorted(
+                            [a for a in pasta_base_lote.iterdir() if a.is_file() and a.suffix.lower() not in exts_ignorar],
+                            key=lambda x: x.name.lower(),
                         )
-                        estado["proc_atual"] = proc
-                        ultimo_pct = -2
 
-                        if proc.stdout:
-                            for linha in proc.stdout:
-                                if estado["cancelar"]:
-                                    break
-                                m_prog = re.search(r"Progress:\s*(\d+)%", linha)
-                                if m_prog:
-                                    pct_item = max(0, min(99, int(m_prog.group(1))))
-                                    if abs(pct_item - ultimo_pct) >= 2:
-                                        ultimo_pct = pct_item
-                                        prog_global = ((i - 1) + (pct_item / 100.0)) / total
-                                        set_progresso(
-                                            prog_global,
-                                            tr("converting", i=i, t=total, name=nome_curto, pct=pct_item),
-                                        )
-                    else:
-                        duracao_total = obter_duracao_segundos(bin_exec, entrada_cmd)
-                        cmd = [
-                            bin_exec, "-y", "-v", "error", "-nostats",
-                            "-progress", "pipe:1", "-i", entrada_cmd
-                        ] + args_extras + [str(destino_ascii)]
+                    total = len(arquivos)
+                    if total == 0:
+                        if str(estado["pasta"]).startswith("/storage/emulated/0") and not tem_acesso_total_arquivos():
+                            log_msg(f"[-] {tr('perm_title')}", "erro")
+                            page.open(dlg_perm)
+                        else:
+                            log_msg(tr("no_media"), "erro")
+                        return
 
-                        proc = subprocess.Popen(
-                            cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="ignore"
-                        )
-                        estado["proc_atual"] = proc
-                        ultimo_pct = -2
+                    pasta_tmp.mkdir(parents=True, exist_ok=True)
+                    log_msg(tr("starting", n=total), "titulo")
+                    log_msg(f"    {nome_modo}", "info")
 
-                        if proc.stdout:
-                            for linha in proc.stdout:
-                                if estado["cancelar"]:
-                                    break
-                                linha = linha.strip()
-                                if linha.startswith("out_time_us=") and duracao_total > 0:
-                                    try:
-                                        us = int(linha.split("=", 1).pop())
-                                        seg_atual = us / 1_000_000.0
-                                        pct_item = max(0, min(99, int((seg_atual / duracao_total) * 100)))
-                                        if abs(pct_item - ultimo_pct) >= 2:
-                                            ultimo_pct = pct_item
-                                            prog_global = ((i - 1) + (pct_item / 100.0)) / total
-                                            set_progresso(
-                                                prog_global,
-                                                tr("converting", i=i, t=total, name=nome_curto, pct=pct_item),
-                                            )
-                                    except Exception:
-                                        pass
+                    ok_count = 0
+                    for i, arq in enumerate(arquivos, 1):
+                        if estado["cancelar"]:
+                            break
 
-                    proc.wait()
-                    estado["proc_atual"] = None
+                        saida_mkv = ""
+                        if "cache" in str(arq).lower() or "/data/" in str(arq):
+                            caches_limpar.append(arq)
+                            tam = arq.stat().st_size if arq.exists() else 0
+                            pasta_destino_base = encontrar_pasta_original(arq.name, tam, estado["pasta"])
+                        else:
+                            pasta_destino_base = arq.parent
 
-                    if estado["cancelar"]:
+                        pasta_saida = pasta_destino_base / "conv_abw"
+                        pasta_saida.mkdir(parents=True, exist_ok=True)
+
+                        nome_curto = arq.name if len(arq.name) <= 20 else arq.name[:17] + "..."
+                        set_progresso((i - 1) / total, tr("converting", i=i, t=total, name=nome_curto, pct=0))
+
+                        destino_final = pasta_saida / f"{arq.stem}{ext_saida}"
+                        destino_ascii = pasta_tmp / f"out_{i}{ext_saida}"
                         if destino_ascii.exists():
                             destino_ascii.unlink()
-                        break
+                        entrada_cmd = str(arq)
 
-                    # mkvmerge retorna 0 (sucesso) ou 1 (sucesso com avisos não fatais); 2 é erro fatal
-                    sucesso_exec = (proc.returncode in (0, 1)) if modo == "mkvmerge" else (proc.returncode == 0)
+                        if modo == "mkvmerge":
+                            env_mkv = os.environ.copy()
+                            env_mkv["LC_ALL"] = "C.UTF-8"
+                            env_mkv["LANG"] = "C.UTF-8"
+                            cmd = [bin_exec, "-o", str(destino_ascii), entrada_cmd]
+                            proc = subprocess.Popen(
+                                cmd,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT,
+                                env=env_mkv,
+                            )
+                            estado["proc_atual"] = proc
+                            pct_sim = 0
+                            while proc.poll() is None:
+                                if estado["cancelar"]:
+                                    break
+                                pct_sim = min(95, pct_sim + 5)
+                                prog_global = ((i - 1) + (pct_sim / 100.0)) / total
+                                set_progresso(
+                                    prog_global,
+                                    tr("converting", i=i, t=total, name=nome_curto, pct=pct_sim),
+                                )
+                                threading.Event().wait(0.35)
 
-                    if sucesso_exec and destino_ascii.exists() and destino_ascii.stat().st_size > 0:
-                        if destino_final.exists():
-                            destino_final.unlink()
-                        shutil.move(str(destino_ascii), str(destino_final))
-                        ok_count += 1
+                            saida_bytes, _ = proc.communicate()
+                            saida_mkv = (saida_bytes or b"").decode("utf-8", errors="ignore").strip()
+                        else:
+                            duracao_total = obter_duracao_segundos(bin_exec, entrada_cmd)
+                            cmd = [
+                                bin_exec, "-y", "-v", "error", "-nostats",
+                                "-progress", "pipe:1", "-i", entrada_cmd
+                            ] + args_extras + [str(destino_ascii)]
+
+                            proc = subprocess.Popen(
+                                cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="ignore"
+                            )
+                            estado["proc_atual"] = proc
+                            ultimo_pct = -2
+
+                            if proc.stdout:
+                                for linha in proc.stdout:
+                                    if estado["cancelar"]:
+                                        break
+                                    linha = linha.strip()
+                                    if linha.startswith("out_time_us=") and duracao_total > 0:
+                                        try:
+                                            us = int(linha.split("=", 1)[1])
+                                            seg_atual = us / 1_000_000.0
+                                            pct_item = max(0, min(99, int((seg_atual / duracao_total) * 100)))
+                                            if abs(pct_item - ultimo_pct) >= 2:
+                                                ultimo_pct = pct_item
+                                                prog_global = ((i - 1) + (pct_item / 100.0)) / total
+                                                set_progresso(
+                                                    prog_global,
+                                                    tr("converting", i=i, t=total, name=nome_curto, pct=pct_item),
+                                                )
+                                        except Exception:
+                                            pass
+
+                            proc.wait()
+
+                        estado["proc_atual"] = None
+
+                        if estado["cancelar"]:
+                            if destino_ascii.exists():
+                                destino_ascii.unlink()
+                            break
+
+                        sucesso_exec = (proc.returncode in (0, 1)) if modo == "mkvmerge" else (proc.returncode == 0)
+
+                        if sucesso_exec and destino_ascii.exists() and destino_ascii.stat().st_size > 0:
+                            if destino_final.exists():
+                                destino_final.unlink()
+                            shutil.move(str(destino_ascii), str(destino_final))
+                            ok_count += 1
+                        else:
+                            if destino_ascii.exists():
+                                destino_ascii.unlink()
+                            log_msg(f"  [!] #{i}/{total} (code={proc.returncode})", "erro")
+                            if modo == "mkvmerge" and saida_mkv:
+                                ultima = saida_mkv.splitlines()[-1].split("\r")[-1].strip()
+                                log_msg(f"      {ultima[:120]}", "aviso")
+
+                        set_progresso(i / total, tr("done_item", i=i, t=total))
+
+                    if estado["cancelar"]:
+                        log_msg(tr("canceled"), "aviso")
                     else:
-                        if destino_ascii.exists():
-                            destino_ascii.unlink()
-                        log_msg(f"  [!] #{i}/{total}", "erro")
-                        if modo == "mkvmerge" and linhas_mkv:
-                            log_msg(f"      {linhas_mkv[-1]}", "aviso")
-
-                    set_progresso(i / total, tr("done_item", i=i, t=total))
-
-                if estado["cancelar"]:
-                    log_msg(tr("canceled"), "aviso")
-                else:
-                    log_msg(tr("finished", ok=ok_count, t=total), "sucesso")
-            except Exception as ex:
-                log_msg(f"[-] {ex}", "erro")
-            finally:
-                for arq_c in caches_limpar:
-                    if arq_c.exists():
+                        log_msg(tr("finished", ok=ok_count, t=total), "sucesso")
+                except Exception as ex:
+                    log_msg(f"[-] {ex}", "erro")
+                finally:
+                    for arq_c in caches_limpar:
+                        if arq_c.exists():
+                            try:
+                                arq_c.unlink()
+                            except Exception:
+                                pass
+                    for tmp_arq in pasta_tmp.glob("*"):
                         try:
-                            arq_c.unlink()
+                            tmp_arq.unlink()
                         except Exception:
                             pass
-                for tmp_arq in pasta_tmp.glob("*"):
-                    try:
-                        tmp_arq.unlink()
-                    except Exception:
-                        pass
-                estado["proc_atual"] = None
-                atualizar_estado_ocupado(False, modo)
-                set_progresso(0.0 if estado["cancelar"] else 1.0, tr("status_ready"))
+                    estado["proc_atual"] = None
+                    atualizar_estado_ocupado(False, modo)
+                    set_progresso(0.0 if estado["cancelar"] else 1.0, tr("status_ready"))
 
-        threading.Thread(target=worker, daemon=True).start()
+            threading.Thread(target=worker, daemon=True).start()
+        except Exception as ex_click:
+            log_msg(f"[-] {ex_click}", "erro")
 
     def iniciar_conversao_click(e):
         executar_lote("ffmpeg")
