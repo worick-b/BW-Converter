@@ -1,12 +1,13 @@
+import json
+import locale
 import os
 import re
-import json
 import shlex
 import shutil
-import locale
-import threading
 import subprocess
+import threading
 from pathlib import Path
+
 import flet as ft
 import flet_permission_handler as fph
 
@@ -38,7 +39,6 @@ TEXTOS = {
         "starting": "[+] Starting {n} file(s)",
         "converting": "Processing {i}/{t}: {name} ({pct}%)",
         "done_item": "Done {i}/{t}",
-        "failed_item": "  [!] Skipped/Failed {name}",
         "finished": "[✓] Finished: {ok}/{t}",
         "folder_set": "[+] Folder set: {name}",
         "dlg_title": "FFmpeg Presets",
@@ -84,7 +84,6 @@ TEXTOS = {
         "starting": "[+] Iniciando {n} arquivo(s)",
         "converting": "Processando {i}/{t}: {name} ({pct}%)",
         "done_item": "Concluído {i}/{t}",
-        "failed_item": "  [!] Ignorado/Falha em {name}",
         "finished": "[✓] Finalizado: {ok}/{t}",
         "folder_set": "[+] Pasta definida: {name}",
         "dlg_title": "Presets FFmpeg",
@@ -111,6 +110,8 @@ PRESETS_INICIAIS = [
     {"nome": "Video MP4 H.264 (CRF 23)", "ext": ".mp4", "args": "-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -c:a libfdk_aac -b:a 128k"},
 ]
 
+EXTS_IGNORAR = {".json", ".txt", ".py", ".apk", ".zip", ".rar", ".7z", ".log", ".ini"}
+
 
 def obter_pasta_privada() -> Path:
     storage = os.environ.get("FLET_APP_STORAGE_DATA")
@@ -121,19 +122,19 @@ def obter_pasta_privada() -> Path:
     return Path(__file__).resolve().parent
 
 
-def carregar_config() -> dict:
-    arq = obter_pasta_privada() / "config.json"
+def ler_json(nome_arquivo: str, padrao):
+    arq = obter_pasta_privada() / nome_arquivo
     if arq.exists():
         try:
             return json.loads(arq.read_text(encoding="utf-8"))
         except Exception:
             pass
-    return {}
+    return padrao
 
 
-def salvar_config(dados: dict) -> None:
+def escrever_json(nome_arquivo: str, dados) -> None:
     try:
-        (obter_pasta_privada() / "config.json").write_text(
+        (obter_pasta_privada() / "config.json" if nome_arquivo == "config.json" else obter_pasta_privada() / nome_arquivo).write_text(
             json.dumps(dados, indent=2, ensure_ascii=False), encoding="utf-8"
         )
     except Exception:
@@ -141,31 +142,33 @@ def salvar_config(dados: dict) -> None:
 
 
 def carregar_presets() -> list[dict]:
-    arq = obter_pasta_privada() / "presets.json"
-    if arq.exists():
-        try:
-            dados = json.loads(arq.read_text(encoding="utf-8"))
-            if isinstance(dados, list) and dados:
-                return dados
-        except Exception:
-            pass
+    dados = ler_json("presets.json", None)
+    if isinstance(dados, list) and dados:
+        return dados
     iniciais = [dict(p) for p in PRESETS_INICIAIS]
-    salvar_presets(iniciais)
+    escrever_json("presets.json", iniciais)
     return iniciais
 
 
-def salvar_presets(lista: list[dict]) -> None:
+def detectar_idioma(page: ft.Page) -> str:
+    cfg = ler_json("config.json", {})
+    if cfg.get("lang") in ("en", "pt"):
+        return cfg["lang"]
     try:
-        (obter_pasta_privada() / "presets.json").write_text(
-            json.dumps(lista, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        if getattr(page, "locale", None) and str(page.locale).lower().startswith("pt"):
+            return "pt"
     except Exception:
         pass
+    try:
+        loc = locale.getlocale()
+        lang_str = str(next(iter(loc), "") or os.environ.get("LANG", "")).lower()
+        return "pt" if lang_str.startswith("pt") else "en"
+    except Exception:
+        return "en"
 
 
 def obter_caminho_binario(nome_so: str) -> str | None:
     pastas_busca = set()
-
     try:
         for linha in Path("/proc/self/maps").read_text(errors="ignore").splitlines():
             for p in linha.split():
@@ -189,9 +192,52 @@ def obter_caminho_binario(nome_so: str) -> str | None:
         cand = pasta / nome_so
         if cand.exists():
             return str(cand)
-
     return None
 
+
+def eh_caminho_cache(caminho: Path) -> bool:
+    s = str(caminho).lower()
+    return "cache" in s or "/data/user/" in s or "/data/data/" in s
+
+
+def resolver_arquivo_original(caminho_selecionado: Path, pasta_trabalho: Path) -> Path:
+    if not eh_caminho_cache(caminho_selecionado):
+        return caminho_selecionado
+
+    nome = caminho_selecionado.name
+    try:
+        tamanho = caminho_selecionado.stat().st_size
+    except Exception:
+        return pasta_trabalho / nome
+
+    sdcard = Path("/storage/emulated/0")
+    candidatos_rapidos = [
+        pasta_trabalho / nome,
+        sdcard / "Download" / nome,
+        sdcard / "Movies" / nome,
+        sdcard / "Music" / nome,
+        sdcard / "Documents" / nome,
+        sdcard / "DCIM" / nome,
+    ]
+    for cand in candidatos_rapidos:
+        try:
+            if cand.exists() and cand.stat().st_size == tamanho:
+                return cand
+        except Exception:
+            pass
+
+    if sdcard.exists():
+        for raiz, dirs, arqs in os.walk(sdcard):
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "Android" and d != "conv_abw"]
+            if nome in arqs:
+                cand = Path(raiz) / nome
+                try:
+                    if cand.stat().st_size == tamanho:
+                        return cand
+                except Exception:
+                    pass
+
+    return pasta_trabalho / nome
 
 def obter_duracao_segundos(bin_ffmpeg: str, caminho_arquivo: str) -> float:
     try:
@@ -211,52 +257,76 @@ def obter_duracao_segundos(bin_ffmpeg: str, caminho_arquivo: str) -> float:
     return 0.0
 
 
-def detectar_idioma(page: ft.Page) -> str:
-    cfg = carregar_config()
-    if cfg.get("lang") in ("en", "pt"):
-        return cfg["lang"]
-    try:
-        if getattr(page, "locale", None) and str(page.locale).lower().startswith("pt"):
-            return "pt"
-    except Exception:
-        pass
-    try:
-        loc = locale.getlocale()
-        lang_str = str(next(iter(loc), "") or os.environ.get("LANG", "")).lower()
-        return "pt" if lang_str.startswith("pt") else "en"
-    except Exception:
-        return "en"
+def rodar_ffmpeg(
+    bin_exec: str,
+    entrada: str,
+    saida_tmp: Path,
+    args_extras: list[str],
+    estado: dict,
+    on_progresso,
+) -> tuple[int, str]:
+    duracao = obter_duracao_segundos(bin_exec, entrada)
+    cmd = [
+        bin_exec, "-y", "-v", "error", "-nostats",
+        "-progress", "pipe:1", "-i", entrada,
+    ] + args_extras + [str(saida_tmp)]
 
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="ignore"
+    )
+    estado["proc_atual"] = proc
+    ultimo_pct = -2
 
-def encontrar_pasta_original(nome_arquivo: str, tamanho_bytes: int, fallback: Path) -> Path:
-    sdcard = Path("/storage/emulated/0")
-    pastas_rapidas = [
-        fallback,
-        sdcard / "Download",
-        sdcard / "Music",
-        sdcard / "Documents",
-        sdcard / "Movies",
-        sdcard / "DCIM",
-    ]
-    for p in pastas_rapidas:
-        cand = p / nome_arquivo
-        try:
-            if cand.exists() and cand.stat().st_size == tamanho_bytes:
-                return p
-        except Exception:
-            pass
-
-    if sdcard.exists():
-        for raiz, dirs, arqs in os.walk(sdcard):
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "Android"]
-            if nome_arquivo in arqs:
-                cand = Path(raiz) / nome_arquivo
+    if proc.stdout:
+        for linha in proc.stdout:
+            if estado["cancelar"]:
+                break
+            linha = linha.strip()
+            if linha.startswith("out_time_us=") and duracao > 0:
                 try:
-                    if cand.stat().st_size == tamanho_bytes:
-                        return Path(raiz)
+                    us = int(linha.split("=", 1)[1])
+                    pct = max(0, min(99, int(((us / 1_000_000.0) / duracao) * 100)))
+                    if abs(pct - ultimo_pct) >= 2:
+                        ultimo_pct = pct
+                        on_progresso(pct)
                 except Exception:
                     pass
-    return fallback
+
+    stderr_txt = (proc.stderr.read() if proc.stderr else "").strip()
+    proc.wait()
+    return proc.returncode, stderr_txt
+
+
+def rodar_mkvmerge(
+    bin_exec: str,
+    entrada: str,
+    saida_tmp: Path,
+    estado: dict,
+    on_progresso,
+) -> tuple[int, str]:
+    env = os.environ.copy()
+    env["LC_ALL"] = "C.UTF-8"
+    env["LANG"] = "C.UTF-8"
+
+    proc = subprocess.Popen(
+        [bin_exec, "-o", str(saida_tmp), entrada],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        env=env,
+    )
+    estado["proc_atual"] = proc
+    pct_sim = 0
+
+    while proc.poll() is None:
+        if estado["cancelar"]:
+            break
+        pct_sim = min(95, pct_sim + 5)
+        on_progresso(pct_sim)
+        threading.Event().wait(0.35)
+
+    saida_bytes, _ = proc.communicate()
+    saida_txt = (saida_bytes or b"").decode("utf-8", errors="ignore").strip()
+    return proc.returncode, saida_txt
 
 def main(page: ft.Page):
     page.title = "ABW Converter"
@@ -268,9 +338,7 @@ def main(page: ft.Page):
 
     pasta_inicial = Path("/storage/emulated/0/Download")
     if not pasta_inicial.exists():
-        pasta_inicial = Path("/storage/emulated/0")
-    if not pasta_inicial.exists():
-        pasta_inicial = Path.home()
+        pasta_inicial = Path("/storage/emulated/0") if Path("/storage/emulated/0").exists() else Path.home()
 
     estado = {
         "lang": detectar_idioma(page),
@@ -288,7 +356,6 @@ def main(page: ft.Page):
         txt = TEXTOS[estado["lang"]].get(chave, chave)
         return txt.format(**kwargs) if kwargs else txt
 
-    # --- Controles Principais ---
     txt_subtitulo = ft.Text(tr("subtitle"), size=12, color="#78909C")
     txt_lbl_pasta = ft.Text(tr("work_folder"), size=11, color="#90A4AE")
     txt_pasta = ft.Text(
@@ -312,6 +379,10 @@ def main(page: ft.Page):
     barra_progresso = ft.ProgressBar(value=0, color="#AB47BC", bgcolor="#262930", height=6, border_radius=4)
     lista_logs = ft.ListView(expand=True, spacing=3, auto_scroll=True)
     dd_presets = ft.Dropdown(label=tr("preset_lbl"), expand=True, text_size=13, border_color="#2C303A")
+
+    txt_start_btn = ft.Text(tr("start_btn"), size=13, weight=ft.FontWeight.BOLD, color="#FFFFFF")
+    txt_remux_btn = ft.Text(tr("remux_btn"), size=13, weight=ft.FontWeight.BOLD, color="#FFFFFF")
+    txt_cancel_btn = ft.Text(tr("cancel_btn"), size=13, weight=ft.FontWeight.BOLD, color="#FFFFFF")
 
     def recarregar_dropdown(selecionar_idx: int = 0):
         estado["presets"] = carregar_presets()
@@ -345,26 +416,16 @@ def main(page: ft.Page):
         estado["ocupado"] = ocupado
         estado["modo_atual"] = modo
         page.keep_screen_on = ocupado
-        btn_converter.disabled = ocupado
-        btn_remux.disabled = ocupado
-        btn_pasta.disabled = ocupado
-        btn_pick.disabled = ocupado
-        btn_manage.disabled = ocupado
-        dd_presets.disabled = ocupado
+        for ctrl in (btn_converter, btn_remux, btn_pasta, btn_pick, btn_manage, dd_presets):
+            ctrl.disabled = ocupado
         btn_cancelar.visible = ocupado
         btn_cancelar.disabled = False
-        if ocupado and modo == "ffmpeg":
-            txt_start_btn.value = tr("running_btn")
-            txt_remux_btn.value = tr("remux_btn")
-        elif ocupado and modo == "mkvmerge":
-            txt_start_btn.value = tr("start_btn")
-            txt_remux_btn.value = tr("remuxing_btn")
-        else:
-            txt_start_btn.value = tr("start_btn")
-            txt_remux_btn.value = tr("remux_btn")
+
+        txt_start_btn.value = tr("running_btn") if (ocupado and modo == "ffmpeg") else tr("start_btn")
+        txt_remux_btn.value = tr("remuxing_btn") if (ocupado and modo == "mkvmerge") else tr("remux_btn")
         page.update()
 
-    def cancelar_conversao_click(e):
+    def cancelar_click(e):
         if estado["ocupado"] and not estado["cancelar"]:
             estado["cancelar"] = True
             btn_cancelar.disabled = True
@@ -377,65 +438,110 @@ def main(page: ft.Page):
                     pass
             page.update()
 
-    # --- FilePickers ---
+    def tem_acesso_total_arquivos() -> bool:
+        sdcard = Path("/storage/emulated/0")
+        if not sdcard.exists():
+            return True
+        try:
+            arq_teste = sdcard / ".abw_perm_check"
+            arq_teste.write_text("ok", encoding="utf-8")
+            arq_teste.unlink()
+            return True
+        except Exception:
+            return False
+
+    def solicitar_permissao_sistema(e):
+        page.close(dlg_perm)
+        try:
+            status = perm_handler.request_permission(fph.PermissionType.MANAGE_EXTERNAL_STORAGE)
+            if status != fph.PermissionStatus.GRANTED:
+                perm_handler.open_app_settings()
+        except Exception:
+            try:
+                perm_handler.open_app_settings()
+            except Exception:
+                pass
+
+    txt_perm_title = ft.Text(tr("perm_title"))
+    txt_perm_desc = ft.Text(tr("perm_desc"), size=13)
+    btn_perm_close = ft.TextButton(text=tr("close"), on_click=lambda e: page.close(dlg_perm))
+    btn_perm_settings = ft.ElevatedButton(text=tr("open_settings"), on_click=solicitar_permissao_sistema)
+    dlg_perm = ft.AlertDialog(
+        modal=True,
+        title=txt_perm_title,
+        content=txt_perm_desc,
+        actions=[btn_perm_close, btn_perm_settings],
+    )
+
+    def atualizar_label_alvo():
+        sels = estado["arquivos_selecionados"]
+        if len(sels) == 1:
+            txt_alvo.value = tr("mode_single", name=sels[0].name)
+            txt_alvo.color = "#FFD54F"
+        elif len(sels) > 1:
+            txt_alvo.value = tr("mode_multi", n=len(sels))
+            txt_alvo.color = "#FFD54F"
+        else:
+            txt_alvo.value = tr("mode_batch")
+            txt_alvo.color = "#81C784"
+
     def on_pasta_result(e: ft.FilePickerResultEvent):
         if e.path:
             estado["pasta"] = Path(e.path).resolve()
             txt_pasta.value = str(estado["pasta"])
-            limpar_arquivo_click(None)
+            estado["arquivos_selecionados"] = []
+            atualizar_label_alvo()
             log_msg(tr("folder_set", name=estado["pasta"].name), "titulo")
 
     def on_arquivo_result(e: ft.FilePickerResultEvent):
         if e.files:
             caminhos = [Path(f.path).resolve() for f in e.files if f.path]
-            if not caminhos:
-                return
-            estado["arquivos_selecionados"] = caminhos
-            if len(caminhos) == 1:
-                txt_alvo.value = tr("mode_single", name=caminhos[0].name)
-            else:
-                txt_alvo.value = tr("mode_multi", n=len(caminhos))
-            txt_alvo.color = "#FFD54F"
-            page.update()
+            if caminhos:
+                estado["arquivos_selecionados"] = caminhos
+                atualizar_label_alvo()
+                page.update()
 
     def on_importar_result(e: ft.FilePickerResultEvent):
-        if e.files:
-            try:
-                arq_json = next(iter(e.files))
-                novos = json.loads(Path(arq_json.path).read_text(encoding="utf-8"))
-                if isinstance(novos, list):
-                    nomes_atuais = {p["nome"].strip().lower() for p in estado["presets"]}
-                    adicionados = 0
-                    for it in novos:
-                        if isinstance(it, dict) and {"nome", "ext", "args"} <= it.keys():
-                            nome_limpo = str(it["nome"]).strip()
-                            if nome_limpo and nome_limpo.lower() not in nomes_atuais:
-                                estado["presets"].append(
-                                    {"nome": nome_limpo, "ext": str(it["ext"]).strip(), "args": str(it["args"]).strip()}
-                                )
-                                nomes_atuais.add(nome_limpo.lower())
-                                adicionados += 1
-                    if adicionados > 0:
-                        salvar_presets(estado["presets"])
-                        atualizar_lista_presets_ui()
-                        log_msg(tr("imported", n=adicionados), "sucesso")
-            except Exception as ex:
-                log_msg(f"[-] {ex}", "erro")
+        if not e.files:
+            return
+        try:
+            arq_json = next(iter(e.files))
+            novos = json.loads(Path(arq_json.path).read_text(encoding="utf-8"))
+            if isinstance(novos, list):
+                nomes_atuais = {p["nome"].strip().lower() for p in estado["presets"]}
+                adicionados = 0
+                for it in novos:
+                    if isinstance(it, dict) and {"nome", "ext", "args"} <= it.keys():
+                        nome_limpo = str(it["nome"]).strip()
+                        if nome_limpo and nome_limpo.lower() not in nomes_atuais:
+                            estado["presets"].append({
+                                "nome": nome_limpo,
+                                "ext": str(it["ext"]).strip(),
+                                "args": str(it["args"]).strip(),
+                            })
+                            nomes_atuais.add(nome_limpo.lower())
+                            adicionados += 1
+                if adicionados > 0:
+                    escrever_json("presets.json", estado["presets"])
+                    atualizar_lista_presets_ui()
+                    log_msg(tr("imported", n=adicionados), "sucesso")
+        except Exception as ex:
+            log_msg(f"[-] {ex}", "erro")
+
+    def on_exportar_result(e: ft.FilePickerResultEvent):
+        if not e.path:
+            return
+        try:
+            destino = Path(e.path).resolve() / "abw_presets_exportados.json"
+            destino.write_text(json.dumps(estado["presets"], indent=2, ensure_ascii=False), encoding="utf-8")
+            fechar_presets_dlg()
+            log_msg(tr("exported", path=destino), "sucesso")
+        except Exception as ex:
+            log_msg(f"[-] {ex}", "erro")
 
     seletor_pasta = ft.FilePicker(on_result=on_pasta_result)
     seletor_arquivo = ft.FilePicker(on_result=on_arquivo_result)
     seletor_importar = ft.FilePicker(on_result=on_importar_result)
-
-    def on_exportar_result(e: ft.FilePickerResultEvent):
-        if e.path:
-            try:
-                destino = Path(e.path).resolve() / "abw_presets_exportados.json"
-                destino.write_text(json.dumps(estado["presets"], indent=2, ensure_ascii=False), encoding="utf-8")
-                fechar_presets_dlg()
-                log_msg(tr("exported", path=destino), "sucesso")
-            except Exception as ex:
-                log_msg(f"[-] {ex}", "erro")
-
     seletor_exportar = ft.FilePicker(on_result=on_exportar_result)
     perm_handler = fph.PermissionHandler()
     page.overlay.extend([seletor_pasta, seletor_arquivo, seletor_importar, seletor_exportar, perm_handler])
@@ -456,11 +562,10 @@ def main(page: ft.Page):
     def limpar_arquivo_click(e):
         if not estado["ocupado"]:
             estado["arquivos_selecionados"] = []
-            txt_alvo.value = tr("mode_batch")
-            txt_alvo.color = "#81C784"
+            atualizar_label_alvo()
             page.update()
 
-    # --- Motor de Conversão (FFmpeg) e Remux (MKVToolNix) ---
+    # --- Orquestrador de Lote ---
     def executar_lote(modo: str):
         try:
             if estado["ocupado"]:
@@ -481,7 +586,7 @@ def main(page: ft.Page):
                     log_msg(tr("no_ffmpeg"), "erro")
                     return
                 idx_sel = int(dd_presets.value) if dd_presets.value is not None else 0
-                preset = estado["presets"][idx_sel] if 0 <= idx_sel < len(estado["presets"]) else estado["presets"]
+                preset = estado["presets"][idx_sel] if 0 <= idx_sel < len(estado["presets"]) else estado["presets"][0]
                 ext_saida = preset.get("ext", ".mp4").strip()
                 if not ext_saida.startswith("."):
                     ext_saida = "." + ext_saida
@@ -501,10 +606,11 @@ def main(page: ft.Page):
                     if estado["arquivos_selecionados"]:
                         arquivos = list(estado["arquivos_selecionados"])
                     else:
-                        pasta_base_lote = estado["pasta"]
-                        exts_ignorar = {".json", ".txt", ".py", ".apk", ".zip", ".rar", ".7z", ".log", ".ini"}
                         arquivos = sorted(
-                            [a for a in pasta_base_lote.iterdir() if a.is_file() and a.suffix.lower() not in exts_ignorar],
+                            [
+                                a for a in estado["pasta"].iterdir()
+                                if a.is_file() and a.suffix.lower() not in EXTS_IGNORAR
+                            ],
                             key=lambda x: x.name.lower(),
                         )
 
@@ -526,13 +632,10 @@ def main(page: ft.Page):
                         if estado["cancelar"]:
                             break
 
-                        saida_mkv = ""
-                        stderr_ff = ""
-                        eh_cache = ("cache" in str(arq).lower() or "/data/" in str(arq))
-                        if eh_cache:
+                        if eh_caminho_cache(arq):
                             caches_limpar.append(arq)
 
-                        arq_original = encontrar_arquivo_original(arq, estado["pasta"])
+                        arq_original = resolver_arquivo_original(arq, estado["pasta"])
                         pasta_saida = arq_original.parent / "conv_abw"
                         pasta_saida.mkdir(parents=True, exist_ok=True)
 
@@ -541,7 +644,7 @@ def main(page: ft.Page):
                             log_msg(f"  [!] #{i}/{total} Arquivo inacessível", "erro")
                             continue
 
-                        nome_curto = arq_original.name if len(arq_original.name) <= 20 else arq_original.name[:17] + "..."
+                        nome_curto = arq_original.name if len(arq_original.name) <= 22 else arq_original.name[:19] + "..."
                         set_progresso((i - 1) / total, tr("converting", i=i, t=total, name=nome_curto, pct=0))
 
                         destino_final = pasta_saida / f"{arq_original.stem}{ext_saida}"
@@ -549,69 +652,20 @@ def main(page: ft.Page):
                         if destino_ascii.exists():
                             destino_ascii.unlink()
 
-                        entrada_cmd = str(fonte_real)
+                        def atualizar_item(pct_item: int):
+                            prog_global = ((i - 1) + (pct_item / 100.0)) / total
+                            set_progresso(prog_global, tr("converting", i=i, t=total, name=nome_curto, pct=pct_item))
 
                         if modo == "mkvmerge":
-                            env_mkv = os.environ.copy()
-                            env_mkv["LC_ALL"] = "C.UTF-8"
-                            env_mkv["LANG"] = "C.UTF-8"
-                            cmd = [bin_exec, "-o", str(destino_ascii), entrada_cmd]
-                            proc = subprocess.Popen(
-                                cmd,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT,
-                                env=env_mkv,
+                            ret_code, erro_saida = rodar_mkvmerge(
+                                bin_exec, str(fonte_real), destino_ascii, estado, atualizar_item
                             )
-                            estado["proc_atual"] = proc
-                            pct_sim = 0
-                            while proc.poll() is None:
-                                if estado["cancelar"]:
-                                    break
-                                pct_sim = min(95, pct_sim + 5)
-                                prog_global = ((i - 1) + (pct_sim / 100.0)) / total
-                                set_progresso(
-                                    prog_global,
-                                    tr("converting", i=i, t=total, name=nome_curto, pct=pct_sim),
-                                )
-                                threading.Event().wait(0.35)
-
-                            saida_bytes, _ = proc.communicate()
-                            saida_mkv = (saida_bytes or b"").decode("utf-8", errors="ignore").strip()
+                            sucesso = ret_code in (0, 1)
                         else:
-                            duracao_total = obter_duracao_segundos(bin_exec, entrada_cmd)
-                            cmd = [
-                                bin_exec, "-y", "-v", "error", "-nostats",
-                                "-progress", "pipe:1", "-i", entrada_cmd
-                            ] + args_extras + [str(destino_ascii)]
-
-                            proc = subprocess.Popen(
-                                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="ignore"
+                            ret_code, erro_saida = rodar_ffmpeg(
+                                bin_exec, str(fonte_real), destino_ascii, args_extras, estado, atualizar_item
                             )
-                            estado["proc_atual"] = proc
-                            ultimo_pct = -2
-
-                            if proc.stdout:
-                                for linha in proc.stdout:
-                                    if estado["cancelar"]:
-                                        break
-                                    linha = linha.strip()
-                                    if linha.startswith("out_time_us=") and duracao_total > 0:
-                                        try:
-                                            us = int(linha.split("=", 1))
-                                            seg_atual = us / 1_000_000.0
-                                            pct_item = max(0, min(99, int((seg_atual / duracao_total) * 100)))
-                                            if abs(pct_item - ultimo_pct) >= 2:
-                                                ultimo_pct = pct_item
-                                                prog_global = ((i - 1) + (pct_item / 100.0)) / total
-                                                set_progresso(
-                                                    prog_global,
-                                                    tr("converting", i=i, t=total, name=nome_curto, pct=pct_item),
-                                                )
-                                        except Exception:
-                                            pass
-
-                            stderr_ff = (proc.stderr.read() if proc.stderr else "").strip()
-                            proc.wait()
+                            sucesso = ret_code == 0
 
                         estado["proc_atual"] = None
 
@@ -620,9 +674,7 @@ def main(page: ft.Page):
                                 destino_ascii.unlink()
                             break
 
-                        sucesso_exec = (proc.returncode in (0, 1)) if modo == "mkvmerge" else (proc.returncode == 0)
-
-                        if sucesso_exec and destino_ascii.exists() and destino_ascii.stat().st_size > 0:
+                        if sucesso and destino_ascii.exists() and destino_ascii.stat().st_size > 0:
                             if destino_final.exists():
                                 destino_final.unlink()
                             shutil.move(str(destino_ascii), str(destino_final))
@@ -630,10 +682,9 @@ def main(page: ft.Page):
                         else:
                             if destino_ascii.exists():
                                 destino_ascii.unlink()
-                            log_msg(f"  [!] #{i}/{total} (code={proc.returncode})", "erro")
-                            err_txt = saida_mkv if modo == "mkvmerge" else stderr_ff
-                            if err_txt:
-                                ultima = err_txt.splitlines()[-1].split("\r")[-1].strip()
+                            log_msg(f"  [!] #{i}/{total} (code={ret_code})", "erro")
+                            if erro_saida:
+                                ultima = erro_saida.splitlines()[-1].split("\r")[-1].strip()
                                 log_msg(f"      {ultima[:120]}", "aviso")
 
                         set_progresso(i / total, tr("done_item", i=i, t=total))
@@ -646,15 +697,16 @@ def main(page: ft.Page):
                     log_msg(f"[-] {ex}", "erro")
                 finally:
                     for arq_c in caches_limpar:
-                        if arq_c.exists():
-                            try:
+                        try:
+                            if arq_c.exists():
                                 arq_c.unlink()
-                            except Exception:
-                                pass
+                        except Exception:
+                            pass
                     for tmp_arq in pasta_tmp.glob("*"):
                         try:
                             tmp_arq.unlink()
                         except Exception:
+                            pass
                     estado["proc_atual"] = None
                     atualizar_estado_ocupado(False, modo)
                     set_progresso(0.0 if estado["cancelar"] else 1.0, tr("status_ready"))
@@ -663,13 +715,7 @@ def main(page: ft.Page):
         except Exception as ex_click:
             log_msg(f"[-] {ex_click}", "erro")
 
-    def iniciar_conversao_click(e):
-        executar_lote("ffmpeg")
-
-    def iniciar_remux_click(e):
-        executar_lote("mkvmerge")
-
-    # --- Gerenciador de Presets (AlertDialog) ---
+    # --- Gerenciador de Presets ---
     inp_nome = ft.TextField(label=tr("name_lbl"), dense=True, text_size=13)
     inp_ext = ft.TextField(label=tr("ext_lbl"), dense=True, text_size=13)
     inp_args = ft.TextField(label=tr("args_lbl"), multiline=True, min_lines=2, max_lines=3, dense=True, text_size=12)
@@ -679,6 +725,20 @@ def main(page: ft.Page):
         page.close(dialog_presets)
         recarregar_dropdown(int(dd_presets.value or 0))
         page.update()
+
+    def editar_preset_click(idx: int):
+        if 0 <= idx < len(estado["presets"]):
+            p = estado["presets"][idx]
+            estado["editando_idx"] = idx
+            inp_nome.value, inp_ext.value, inp_args.value = p["nome"], p["ext"], p["args"]
+            page.update()
+
+    def apagar_preset_click(idx: int):
+        if len(estado["presets"]) <= 1 or not (0 <= idx < len(estado["presets"])):
+            return
+        estado["presets"].pop(idx)
+        escrever_json("presets.json", estado["presets"])
+        atualizar_lista_presets_ui()
 
     def atualizar_lista_presets_ui():
         col_lista_presets.controls.clear()
@@ -717,20 +777,6 @@ def main(page: ft.Page):
             )
         page.update()
 
-    def editar_preset_click(idx: int):
-        p = next((item for i, item in enumerate(estado["presets"]) if i == idx), None)
-        if p:
-            estado["editando_idx"] = idx
-            inp_nome.value, inp_ext.value, inp_args.value = p["nome"], p["ext"], p["args"]
-            page.update()
-
-    def apagar_preset_click(idx: int):
-        if len(estado["presets"]) <= 1:
-            return
-        estado["presets"].pop(idx)
-        salvar_presets(estado["presets"])
-        atualizar_lista_presets_ui()
-
     def salvar_preset_click(e):
         nome = (inp_nome.value or "").strip()
         ext = (inp_ext.value or "").strip()
@@ -741,12 +787,11 @@ def main(page: ft.Page):
             ext = "." + ext
         item = {"nome": nome, "ext": ext, "args": args}
         if estado["editando_idx"] is not None:
-            idx_ed = estado["editando_idx"]
-            estado["presets"] = [item if i == idx_ed else p for i, p in enumerate(estado["presets"])]
+            estado["presets"][estado["editando_idx"]] = item
             estado["editando_idx"] = None
         else:
             estado["presets"].append(item)
-        salvar_presets(estado["presets"])
+        escrever_json("presets.json", estado["presets"])
         inp_nome.value = inp_ext.value = inp_args.value = ""
         atualizar_lista_presets_ui()
 
@@ -755,26 +800,28 @@ def main(page: ft.Page):
         for p in PRESETS_INICIAIS:
             if p["nome"] not in nomes_existentes:
                 estado["presets"].append(dict(p))
-        salvar_presets(estado["presets"])
+        escrever_json("presets.json", estado["presets"])
         atualizar_lista_presets_ui()
         log_msg(tr("restored"), "sucesso")
 
-    def exportar_presets_click(e):
-        seletor_exportar.get_directory_path(
-            initial_directory=str(estado["pasta"]) if estado["pasta"].exists() else None
-        )
-
-    def importar_presets_click(e):
-        seletor_importar.pick_files(
+    btn_salvar_preset = ft.ElevatedButton(text=tr("save"), icon=ft.Icons.SAVE, on_click=salvar_preset_click)
+    btn_restaurar = ft.TextButton(text=tr("restore"), icon=ft.Icons.RESTORE, on_click=restaurar_presets_click)
+    btn_importar = ft.TextButton(
+        text=tr("import"),
+        icon=ft.Icons.UPLOAD_FILE,
+        on_click=lambda e: seletor_importar.pick_files(
             allow_multiple=False,
             allowed_extensions=["json"],
             initial_directory=str(estado["pasta"]) if estado["pasta"].exists() else None,
-        )
-
-    btn_salvar_preset = ft.ElevatedButton(text=tr("save"), icon=ft.Icons.SAVE, on_click=salvar_preset_click)
-    btn_restaurar = ft.TextButton(text=tr("restore"), icon=ft.Icons.RESTORE, on_click=restaurar_presets_click)
-    btn_importar = ft.TextButton(text=tr("import"), icon=ft.Icons.UPLOAD_FILE, on_click=importar_presets_click)
-    btn_exportar = ft.TextButton(text=tr("export"), icon=ft.Icons.DOWNLOAD, on_click=exportar_presets_click)
+        ),
+    )
+    btn_exportar = ft.TextButton(
+        text=tr("export"),
+        icon=ft.Icons.DOWNLOAD,
+        on_click=lambda e: seletor_exportar.get_directory_path(
+            initial_directory=str(estado["pasta"]) if estado["pasta"].exists() else None
+        ),
+    )
     btn_fechar_dlg = ft.TextButton(text=tr("close"), on_click=fechar_presets_dlg)
     txt_dlg_title = ft.Text(tr("dlg_title"), size=16, weight=ft.FontWeight.BOLD)
 
@@ -798,33 +845,24 @@ def main(page: ft.Page):
     )
 
     def abrir_presets_click(e):
-        if estado["ocupado"]:
-            return
-        estado["presets"] = carregar_presets()
-        estado["editando_idx"] = None
-        inp_nome.value = inp_ext.value = inp_args.value = ""
-        atualizar_lista_presets_ui()
-        page.open(dialog_presets)
+        if not estado["ocupado"]:
+            estado["presets"] = carregar_presets()
+            estado["editando_idx"] = None
+            inp_nome.value = inp_ext.value = inp_args.value = ""
+            atualizar_lista_presets_ui()
+            page.open(dialog_presets)
 
-    # --- Botões da Tela Principal ---
+    # --- Botões e Troca de Idioma ---
     btn_pasta = ft.ElevatedButton(
         text=tr("folder_btn"),
         icon=ft.Icons.FOLDER_OPEN,
-        style=ft.ButtonStyle(
-            bgcolor="#2B3240",
-            color="#FFFFFF",
-            shape=ft.RoundedRectangleBorder(radius=8),
-        ),
+        style=ft.ButtonStyle(bgcolor="#2B3240", color="#FFFFFF", shape=ft.RoundedRectangleBorder(radius=8)),
         on_click=mudar_pasta_click,
     )
     btn_pick = ft.ElevatedButton(
         text=tr("pick_file"),
         icon=ft.Icons.AUDIO_FILE,
-        style=ft.ButtonStyle(
-            bgcolor="#232834",
-            color="#E0E0E0",
-            shape=ft.RoundedRectangleBorder(radius=8),
-        ),
+        style=ft.ButtonStyle(bgcolor="#232834", color="#E0E0E0", shape=ft.RoundedRectangleBorder(radius=8)),
         expand=True,
         on_click=escolher_arquivo_click,
     )
@@ -834,13 +872,10 @@ def main(page: ft.Page):
         tooltip=tr("manage_tip"),
         on_click=abrir_presets_click,
     )
-    txt_start_btn = ft.Text(tr("start_btn"), size=13, weight=ft.FontWeight.BOLD, color="#FFFFFF")
-    txt_remux_btn = ft.Text(tr("remux_btn"), size=13, weight=ft.FontWeight.BOLD, color="#FFFFFF")
-    txt_cancel_btn = ft.Text(tr("cancel_btn"), size=13, weight=ft.FontWeight.BOLD, color="#FFFFFF")
 
     def alternar_idioma_click(e):
         estado["lang"] = "en" if estado["lang"] == "pt" else "pt"
-        salvar_config({"lang": estado["lang"]})
+        escrever_json("config.json", {"lang": estado["lang"]})
 
         btn_lang.text = estado["lang"].upper()
         txt_subtitulo.value = tr("subtitle")
@@ -869,13 +904,7 @@ def main(page: ft.Page):
         btn_perm_close.text = tr("close")
         btn_perm_settings.text = tr("open_settings")
 
-        sels = estado["arquivos_selecionados"]
-        if len(sels) == 1:
-            txt_alvo.value = tr("mode_single", name=sels[0].name)
-        elif len(sels) > 1:
-            txt_alvo.value = tr("mode_multi", n=len(sels))
-        else:
-            txt_alvo.value = tr("mode_batch")
+        atualizar_label_alvo()
         page.update()
 
     btn_lang = ft.TextButton(
@@ -884,7 +913,7 @@ def main(page: ft.Page):
         on_click=alternar_idioma_click,
     )
 
-    # --- Cartões e Layout ---
+    # --- Layout Principal ---
     card_pasta = ft.Container(
         bgcolor="#191B20",
         border=ft.border.all(1, "#2C303A"),
@@ -908,10 +937,7 @@ def main(page: ft.Page):
         content=ft.Column(
             [
                 ft.Row(
-                    [
-                        txt_alvo,
-                        ft.IconButton(icon=ft.Icons.CLEAR, icon_size=18, on_click=limpar_arquivo_click),
-                    ],
+                    [txt_alvo, ft.IconButton(icon=ft.Icons.CLEAR, icon_size=18, on_click=limpar_arquivo_click)],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
                 ft.Row([btn_pick]),
@@ -932,28 +958,28 @@ def main(page: ft.Page):
         content=ft.Row(
             [ft.Icon(ft.Icons.PLAY_ARROW_ROUNDED, size=20, color="#FFFFFF"), txt_start_btn],
             alignment=ft.MainAxisAlignment.CENTER,
-            spacing=4,
+            spacing=6,
         ),
         style=ft.ButtonStyle(
             bgcolor="#7B1FA2",
             shape=ft.RoundedRectangleBorder(radius=10),
-            padding=ft.padding.symmetric(vertical=14, horizontal=8),
+            padding=ft.padding.symmetric(vertical=14),
         ),
-        on_click=iniciar_conversao_click,
+        on_click=lambda e: executar_lote("ffmpeg"),
     )
 
     btn_remux = ft.ElevatedButton(
         content=ft.Row(
             [ft.Icon(ft.Icons.MOVIE_FILTER_ROUNDED, size=20, color="#FFFFFF"), txt_remux_btn],
             alignment=ft.MainAxisAlignment.CENTER,
-            spacing=4,
+            spacing=6,
         ),
         style=ft.ButtonStyle(
             bgcolor="#00695C",
             shape=ft.RoundedRectangleBorder(radius=10),
-            padding=ft.padding.symmetric(vertical=14, horizontal=8),
+            padding=ft.padding.symmetric(vertical=14),
         ),
-        on_click=iniciar_remux_click,
+        on_click=lambda e: executar_lote("mkvmerge"),
     )
 
     btn_cancelar = ft.ElevatedButton(
@@ -961,13 +987,14 @@ def main(page: ft.Page):
         content=ft.Row(
             [ft.Icon(ft.Icons.STOP_ROUNDED, size=20, color="#FFFFFF"), txt_cancel_btn],
             alignment=ft.MainAxisAlignment.CENTER,
+            spacing=6,
         ),
         style=ft.ButtonStyle(
             bgcolor="#C62828",
             shape=ft.RoundedRectangleBorder(radius=10),
-            padding=ft.padding.symmetric(vertical=14, horizontal=12),
+            padding=ft.padding.symmetric(vertical=14),
         ),
-        on_click=cancelar_conversao_click,
+        on_click=cancelar_click,
     )
 
     card_logs = ft.Container(
@@ -990,11 +1017,11 @@ def main(page: ft.Page):
         card_pasta,
         card_alvo,
         card_preset,
-        ft.Row(
+        ft.Column(
             [
-                ft.Container(content=btn_converter, expand=True),
-                ft.Container(content=btn_remux, expand=True),
-                btn_cancelar,
+                ft.Row([ft.Container(content=btn_converter, expand=True)]),
+                ft.Row([ft.Container(content=btn_remux, expand=True)]),
+                ft.Row([ft.Container(content=btn_cancelar, expand=True)]),
             ],
             spacing=6,
         ),
@@ -1002,48 +1029,8 @@ def main(page: ft.Page):
         card_logs,
     )
 
-    # --- Verificação de Permissão Android ---
-    def tem_acesso_total_arquivos() -> bool:
-        sdcard = Path("/storage/emulated/0")
-        if not sdcard.exists():
-            return True
-        try:
-            arq_teste = sdcard / ".abw_perm_check"
-            arq_teste.write_text("ok", encoding="utf-8")
-            arq_teste.unlink()
-            return True
-        except Exception:
-            return False
-
-    def solicitar_permissao_sistema(e):
-        page.close(dlg_perm)
-        try:
-            status = perm_handler.request_permission(fph.PermissionType.MANAGE_EXTERNAL_STORAGE)
-            if status != fph.PermissionStatus.GRANTED:
-                perm_handler.open_app_settings()
-        except Exception:
-            try:
-                perm_handler.open_app_settings()
-            except Exception:
-                pass
-
-    txt_perm_title = ft.Text(tr("perm_title"))
-    txt_perm_desc = ft.Text(tr("perm_desc"), size=13)
-    btn_perm_close = ft.TextButton(text=tr("close"), on_click=lambda e: page.close(dlg_perm))
-    btn_perm_settings = ft.ElevatedButton(text=tr("open_settings"), on_click=solicitar_permissao_sistema)
-
-    dlg_perm = ft.AlertDialog(
-        modal=True,
-        title=txt_perm_title,
-        content=txt_perm_desc,
-        actions=[btn_perm_close, btn_perm_settings],
-    )
-
-    def verificar_permissao_android():
-        if not tem_acesso_total_arquivos():
-            page.open(dlg_perm)
-
-    verificar_permissao_android()
+    if not tem_acesso_total_arquivos():
+        page.open(dlg_perm)
     log_msg(f"[✓] {tr('ready')}", "sucesso")
 
 
