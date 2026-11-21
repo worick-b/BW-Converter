@@ -12,7 +12,7 @@ import flet_permission_handler as fph
 
 TEXTOS = {
     "en": {
-        "subtitle": "FFmpeg 8.1 Engine",
+        "subtitle": "FFmpeg 8.1 + MKVToolNix",
         "work_folder": "Working Folder:",
         "folder_btn": "Folder",
         "mode_batch": "Batch Mode: Entire working folder",
@@ -22,18 +22,21 @@ TEXTOS = {
         "preset_lbl": "Active Preset",
         "manage_tip": "Manage Presets",
         "start_btn": "START CONVERSION",
+        "remux_btn": "REMUX MKV",
         "running_btn": "CONVERTING...",
+        "remuxing_btn": "REMUXING...",
         "cancel_btn": "CANCEL",
-        "canceling": "Canceling conversion...",
-        "canceled": "[!] Conversion canceled by user.",
+        "canceling": "Canceling operation...",
+        "canceled": "[!] Operation canceled by user.",
         "ready": "Ready. Output saved to conv_abw",
         "status_ready": "Ready to convert.",
         "wait": "[!] Wait for the current task to finish.",
         "no_ffmpeg": "[-] Embedded FFmpeg (libffmpeg_bin.so) not found!",
-        "preparing": "Preparing FFmpeg...",
-        "no_media": "[-] No files found to convert.",
+        "no_mkvmerge": "[-] Embedded MKVToolNix (libmkvmerge_bin.so) not found!",
+        "preparing": "Preparing engine...",
+        "no_media": "[-] No files found to process.",
         "starting": "[+] Starting {n} file(s)",
-        "converting": "Converting {i}/{t}: {name} ({pct}%)",
+        "converting": "Processing {i}/{t}: {name} ({pct}%)",
         "done_item": "Done {i}/{t}",
         "failed_item": "  [!] Skipped/Failed {name}",
         "finished": "[✓] Finished: {ok}/{t}",
@@ -55,7 +58,7 @@ TEXTOS = {
         "open_settings": "Open Settings",
     },
     "pt": {
-        "subtitle": "Motor FFmpeg 8.1",
+        "subtitle": "FFmpeg 8.1 + MKVToolNix",
         "work_folder": "Pasta de Trabalho:",
         "folder_btn": "Pasta",
         "mode_batch": "Modo Lote: Toda a pasta de trabalho",
@@ -65,18 +68,21 @@ TEXTOS = {
         "preset_lbl": "Preset Ativo",
         "manage_tip": "Gerenciar Presets",
         "start_btn": "INICIAR CONVERSÃO",
+        "remux_btn": "REMUX MKV",
         "running_btn": "CONVERTENDO...",
+        "remuxing_btn": "REMUXANDO...",
         "cancel_btn": "CANCELAR",
-        "canceling": "Cancelando conversão...",
-        "canceled": "[!] Conversão cancelada pelo usuário.",
+        "canceling": "Cancelando operação...",
+        "canceled": "[!] Operação cancelada pelo usuário.",
         "ready": "Pronto. Salvo em conv_abw",
         "status_ready": "Pronto para converter.",
-        "wait": "[!] Aguarde a conversão atual terminar.",
+        "wait": "[!] Aguarde a tarefa atual terminar.",
         "no_ffmpeg": "[-] FFmpeg embutido (libffmpeg_bin.so) não encontrado!",
-        "preparing": "Preparando FFmpeg...",
-        "no_media": "[-] Nenhum arquivo encontrado para converter.",
+        "no_mkvmerge": "[-] MKVToolNix embutido (libmkvmerge_bin.so) não encontrado!",
+        "preparing": "Preparando motor...",
+        "no_media": "[-] Nenhum arquivo encontrado para processar.",
         "starting": "[+] Iniciando {n} arquivo(s)",
-        "converting": "Convertendo {i}/{t}: {name} ({pct}%)",
+        "converting": "Processando {i}/{t}: {name} ({pct}%)",
         "done_item": "Concluído {i}/{t}",
         "failed_item": "  [!] Ignorado/Falha em {name}",
         "finished": "[✓] Finalizado: {ok}/{t}",
@@ -157,8 +163,7 @@ def salvar_presets(lista: list[dict]) -> None:
         pass
 
 
-def obter_caminho_ffmpeg() -> str | None:
-    nome_so = "libffmpeg_bin.so"
+def obter_caminho_binario(nome_so: str) -> str | None:
     pastas_busca = set()
 
     try:
@@ -274,6 +279,7 @@ def main(page: ft.Page):
         "presets": carregar_presets(),
         "editando_idx": None,
         "ocupado": False,
+        "modo_atual": "ffmpeg",
         "cancelar": False,
         "proc_atual": None,
     }
@@ -335,17 +341,27 @@ def main(page: ft.Page):
         txt_status.value = texto
         page.update()
 
-    def atualizar_estado_ocupado(ocupado: bool):
+    def atualizar_estado_ocupado(ocupado: bool, modo: str = "ffmpeg"):
         estado["ocupado"] = ocupado
+        estado["modo_atual"] = modo
         page.keep_screen_on = ocupado
         btn_converter.disabled = ocupado
+        btn_remux.disabled = ocupado
         btn_pasta.disabled = ocupado
         btn_pick.disabled = ocupado
         btn_manage.disabled = ocupado
         dd_presets.disabled = ocupado
         btn_cancelar.visible = ocupado
         btn_cancelar.disabled = False
-        txt_start_btn.value = tr("running_btn") if ocupado else tr("start_btn")
+        if ocupado and modo == "ffmpeg":
+            txt_start_btn.value = tr("running_btn")
+            txt_remux_btn.value = tr("remux_btn")
+        elif ocupado and modo == "mkvmerge":
+            txt_start_btn.value = tr("start_btn")
+            txt_remux_btn.value = tr("remuxing_btn")
+        else:
+            txt_start_btn.value = tr("start_btn")
+            txt_remux_btn.value = tr("remux_btn")
         page.update()
 
     def cancelar_conversao_click(e):
@@ -444,29 +460,38 @@ def main(page: ft.Page):
             txt_alvo.color = "#81C784"
             page.update()
 
-    # --- Motor de Conversão FFmpeg ---
-    def iniciar_conversao_click(e):
+    # --- Motor de Conversão (FFmpeg) e Remux (MKVToolNix) ---
+    def executar_lote(modo: str):
         if estado["ocupado"]:
             log_msg(tr("wait"), "aviso")
             return
 
-        bin_ffmpeg = obter_caminho_ffmpeg()
-        if not bin_ffmpeg:
-            log_msg(tr("no_ffmpeg"), "erro")
-            return
-
-        preset = next(
-            (p for idx, p in enumerate(estado["presets"]) if idx == int(dd_presets.value or 0)),
-            next(iter(estado["presets"])),
-        )
-        ext_saida = preset.get("ext", ".mp4").strip()
-        if not ext_saida.startswith("."):
-            ext_saida = "." + ext_saida
-        args_extras = shlex.split(preset.get("args", ""))
+        if modo == "mkvmerge":
+            bin_exec = obter_caminho_binario("libmkvmerge_bin.so")
+            if not bin_exec:
+                log_msg(tr("no_mkvmerge"), "erro")
+                return
+            ext_saida = ".mkv"
+            args_extras = []
+            nome_modo = "MKVToolNix (Remux MKV)"
+        else:
+            bin_exec = obter_caminho_binario("libffmpeg_bin.so")
+            if not bin_exec:
+                log_msg(tr("no_ffmpeg"), "erro")
+                return
+            preset = next(
+                (p for idx, p in enumerate(estado["presets"]) if idx == int(dd_presets.value or 0)),
+                next(iter(estado["presets"])),
+            )
+            ext_saida = preset.get("ext", ".mp4").strip()
+            if not ext_saida.startswith("."):
+                ext_saida = "." + ext_saida
+            args_extras = shlex.split(preset.get("args", ""))
+            nome_modo = f"Preset: {preset['nome']}"
 
         estado["cancelar"] = False
         estado["proc_atual"] = None
-        atualizar_estado_ocupado(True)
+        atualizar_estado_ocupado(True, modo)
         lista_logs.controls.clear()
         set_progresso(0, tr("preparing"))
 
@@ -495,7 +520,7 @@ def main(page: ft.Page):
 
                 pasta_tmp.mkdir(parents=True, exist_ok=True)
                 log_msg(tr("starting", n=total), "titulo")
-                log_msg(f"    Preset: {preset['nome']}", "info")
+                log_msg(f"    {nome_modo}", "info")
 
                 ok_count = 0
                 for i, arq in enumerate(arquivos, 1):
@@ -519,27 +544,21 @@ def main(page: ft.Page):
                     destino_ascii = pasta_tmp / f"out_{i}{ext_saida}"
                     entrada_cmd = str(arq)
 
-                    duracao_total = obter_duracao_segundos(bin_ffmpeg, entrada_cmd)
+                    if modo == "mkvmerge":
+                        cmd = [bin_exec, "--ui-language", "en", "-o", str(destino_ascii), entrada_cmd]
+                        proc = subprocess.Popen(
+                            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="ignore"
+                        )
+                        estado["proc_atual"] = proc
+                        ultimo_pct = -2
 
-                    cmd = [
-                        bin_ffmpeg, "-y", "-v", "error", "-nostats",
-                        "-progress", "pipe:1", "-i", entrada_cmd
-                    ] + args_extras + [str(destino_ascii)]
-
-                    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="ignore")
-                    estado["proc_atual"] = proc
-                    ultimo_pct = -2
-
-                    if proc.stdout:
-                        for linha in proc.stdout:
-                            if estado["cancelar"]:
-                                break
-                            linha = linha.strip()
-                            if linha.startswith("out_time_us=") and duracao_total > 0:
-                                try:
-                                    us = int(linha.split("=", 1).pop())
-                                    seg_atual = us / 1_000_000.0
-                                    pct_item = max(0, min(99, int((seg_atual / duracao_total) * 100)))
+                        if proc.stdout:
+                            for linha in proc.stdout:
+                                if estado["cancelar"]:
+                                    break
+                                m_prog = re.search(r"Progress:\s*(\d+)%", linha)
+                                if m_prog:
+                                    pct_item = max(0, min(99, int(m_prog.group(1))))
                                     if abs(pct_item - ultimo_pct) >= 2:
                                         ultimo_pct = pct_item
                                         prog_global = ((i - 1) + (pct_item / 100.0)) / total
@@ -547,8 +566,38 @@ def main(page: ft.Page):
                                             prog_global,
                                             tr("converting", i=i, t=total, name=nome_curto, pct=pct_item),
                                         )
-                                except Exception:
-                                    pass
+                    else:
+                        duracao_total = obter_duracao_segundos(bin_exec, entrada_cmd)
+                        cmd = [
+                            bin_exec, "-y", "-v", "error", "-nostats",
+                            "-progress", "pipe:1", "-i", entrada_cmd
+                        ] + args_extras + [str(destino_ascii)]
+
+                        proc = subprocess.Popen(
+                            cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="ignore"
+                        )
+                        estado["proc_atual"] = proc
+                        ultimo_pct = -2
+
+                        if proc.stdout:
+                            for linha in proc.stdout:
+                                if estado["cancelar"]:
+                                    break
+                                linha = linha.strip()
+                                if linha.startswith("out_time_us=") and duracao_total > 0:
+                                    try:
+                                        us = int(linha.split("=", 1).pop())
+                                        seg_atual = us / 1_000_000.0
+                                        pct_item = max(0, min(99, int((seg_atual / duracao_total) * 100)))
+                                        if abs(pct_item - ultimo_pct) >= 2:
+                                            ultimo_pct = pct_item
+                                            prog_global = ((i - 1) + (pct_item / 100.0)) / total
+                                            set_progresso(
+                                                prog_global,
+                                                tr("converting", i=i, t=total, name=nome_curto, pct=pct_item),
+                                            )
+                                    except Exception:
+                                        pass
 
                     proc.wait()
                     estado["proc_atual"] = None
@@ -558,7 +607,10 @@ def main(page: ft.Page):
                             destino_ascii.unlink()
                         break
 
-                    if proc.returncode == 0 and destino_ascii.exists() and destino_ascii.stat().st_size > 0:
+                    # mkvmerge retorna 0 (sucesso) ou 1 (sucesso com avisos não fatais); 2 é erro fatal
+                    sucesso_exec = (proc.returncode in (0, 1)) if modo == "mkvmerge" else (proc.returncode == 0)
+
+                    if sucesso_exec and destino_ascii.exists() and destino_ascii.stat().st_size > 0:
                         if destino_final.exists():
                             destino_final.unlink()
                         shutil.move(str(destino_ascii), str(destino_final))
@@ -589,10 +641,16 @@ def main(page: ft.Page):
                     except Exception:
                         pass
                 estado["proc_atual"] = None
-                atualizar_estado_ocupado(False)
+                atualizar_estado_ocupado(False, modo)
                 set_progresso(0.0 if estado["cancelar"] else 1.0, tr("status_ready"))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def iniciar_conversao_click(e):
+        executar_lote("ffmpeg")
+
+    def iniciar_remux_click(e):
+        executar_lote("mkvmerge")
 
     # --- Gerenciador de Presets (AlertDialog) ---
     inp_nome = ft.TextField(label=tr("name_lbl"), dense=True, text_size=13)
@@ -759,7 +817,8 @@ def main(page: ft.Page):
         tooltip=tr("manage_tip"),
         on_click=abrir_presets_click,
     )
-    txt_start_btn = ft.Text(tr("start_btn"), size=14, weight=ft.FontWeight.BOLD, color="#FFFFFF")
+    txt_start_btn = ft.Text(tr("start_btn"), size=13, weight=ft.FontWeight.BOLD, color="#FFFFFF")
+    txt_remux_btn = ft.Text(tr("remux_btn"), size=13, weight=ft.FontWeight.BOLD, color="#FFFFFF")
     txt_cancel_btn = ft.Text(tr("cancel_btn"), size=13, weight=ft.FontWeight.BOLD, color="#FFFFFF")
 
     def alternar_idioma_click(e):
@@ -773,7 +832,8 @@ def main(page: ft.Page):
         btn_pick.text = tr("pick_file")
         dd_presets.label = tr("preset_lbl")
         btn_manage.tooltip = tr("manage_tip")
-        txt_start_btn.value = tr("running_btn") if estado["ocupado"] else tr("start_btn")
+        txt_start_btn.value = tr("running_btn") if (estado["ocupado"] and estado["modo_atual"] == "ffmpeg") else tr("start_btn")
+        txt_remux_btn.value = tr("remuxing_btn") if (estado["ocupado"] and estado["modo_atual"] == "mkvmerge") else tr("remux_btn")
         txt_cancel_btn.value = tr("cancel_btn")
         txt_status.value = tr("status_ready")
 
@@ -853,15 +913,30 @@ def main(page: ft.Page):
 
     btn_converter = ft.ElevatedButton(
         content=ft.Row(
-            [ft.Icon(ft.Icons.PLAY_ARROW_ROUNDED, size=22, color="#FFFFFF"), txt_start_btn],
+            [ft.Icon(ft.Icons.PLAY_ARROW_ROUNDED, size=20, color="#FFFFFF"), txt_start_btn],
             alignment=ft.MainAxisAlignment.CENTER,
+            spacing=4,
         ),
         style=ft.ButtonStyle(
             bgcolor="#7B1FA2",
             shape=ft.RoundedRectangleBorder(radius=10),
-            padding=ft.padding.symmetric(vertical=14),
+            padding=ft.padding.symmetric(vertical=14, horizontal=8),
         ),
         on_click=iniciar_conversao_click,
+    )
+
+    btn_remux = ft.ElevatedButton(
+        content=ft.Row(
+            [ft.Icon(ft.Icons.MOVIE_FILTER_ROUNDED, size=20, color="#FFFFFF"), txt_remux_btn],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=4,
+        ),
+        style=ft.ButtonStyle(
+            bgcolor="#00695C",
+            shape=ft.RoundedRectangleBorder(radius=10),
+            padding=ft.padding.symmetric(vertical=14, horizontal=8),
+        ),
+        on_click=iniciar_remux_click,
     )
 
     btn_cancelar = ft.ElevatedButton(
@@ -898,7 +973,14 @@ def main(page: ft.Page):
         card_pasta,
         card_alvo,
         card_preset,
-        ft.Row([ft.Container(content=btn_converter, expand=True), btn_cancelar], spacing=8),
+        ft.Row(
+            [
+                ft.Container(content=btn_converter, expand=True),
+                ft.Container(content=btn_remux, expand=True),
+                btn_cancelar,
+            ],
+            spacing=6,
+        ),
         ft.Column([txt_status, barra_progresso], spacing=4),
         card_logs,
     )
