@@ -467,33 +467,39 @@ def main(page: ft.Page):
             return
 
         if modo == "mkvmerge":
-            bin_exec = obter_caminho_binario("libmkvmerge_bin.so")
-            if not bin_exec:
-                log_msg(tr("no_mkvmerge"), "erro")
-                return
-            ext_saida = ".mkv"
-            args_extras = []
-            nome_modo = "MKVToolNix (Remux MKV)"
-        else:
-            bin_exec = obter_caminho_binario("libffmpeg_bin.so")
-            if not bin_exec:
-                log_msg(tr("no_ffmpeg"), "erro")
-                return
-            preset = next(
-                (p for idx, p in enumerate(estado["presets"]) if idx == int(dd_presets.value or 0)),
-                next(iter(estado["presets"])),
-            )
-            ext_saida = preset.get("ext", ".mp4").strip()
-            if not ext_saida.startswith("."):
-                ext_saida = "." + ext_saida
-            args_extras = shlex.split(preset.get("args", ""))
-            nome_modo = f"Preset: {preset['nome']}"
+                        env_mkv = os.environ.copy()
+                        env_mkv["LC_ALL"] = "C.UTF-8"
+                        env_mkv["LANG"] = "C.UTF-8"
+                        cmd = [bin_exec, "-o", str(destino_ascii), entrada_cmd]
+                        proc = subprocess.Popen(
+                            cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            errors="ignore",
+                            env=env_mkv,
+                        )
+                        estado["proc_atual"] = proc
+                        ultimo_pct = -2
+                        linhas_mkv = []
 
-        estado["cancelar"] = False
-        estado["proc_atual"] = None
-        atualizar_estado_ocupado(True, modo)
-        lista_logs.controls.clear()
-        set_progresso(0, tr("preparing"))
+                        if proc.stdout:
+                            for linha in proc.stdout:
+                                if estado["cancelar"]:
+                                    break
+                                linha_limpa = linha.strip()
+                                if linha_limpa:
+                                    linhas_mkv.append(linha_limpa)
+                                m_prog = re.search(r"Progress:\s*(\d+)%", linha_limpa)
+                                if m_prog:
+                                    pct_item = max(0, min(99, int(m_prog.group(1))))
+                                    if abs(pct_item - ultimo_pct) >= 2:
+                                        ultimo_pct = pct_item
+                                        prog_global = ((i - 1) + (pct_item / 100.0)) / total
+                                        set_progresso(
+                                            prog_global,
+                                            tr("converting", i=i, t=total, name=nome_curto, pct=pct_item),
+                                        )
 
         def worker():
             caches_limpar = []
@@ -619,6 +625,8 @@ def main(page: ft.Page):
                         if destino_ascii.exists():
                             destino_ascii.unlink()
                         log_msg(f"  [!] #{i}/{total}", "erro")
+                        if modo == "mkvmerge" and linhas_mkv:
+                            log_msg(f"      {linhas_mkv[-1]}", "aviso")
 
                     set_progresso(i / total, tr("done_item", i=i, t=total))
 
