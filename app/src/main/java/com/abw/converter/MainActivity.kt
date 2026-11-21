@@ -197,7 +197,6 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
         if (logs.isNotEmpty()) logListState.animateScrollToItem(logs.size - 1)
     }
 
-    // Seletores nativos do Android (sem cópia para o cache!)
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
         if (uri != null) {
             val dir = MediaEngines.resolverUriParaArquivo(context, uri)
@@ -373,8 +372,8 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
         }
     }
 
-        val alvoTexto = when {
-        arquivosSelecionados.size == 1 -> tr("mode_single", "name" to arquivosSelecionados[0].name)
+    val alvoTexto = when {
+        arquivosSelecionados.size == 1 -> tr("mode_single", "name" to arquivosSelecionados.first().name)
         arquivosSelecionados.size > 1 -> tr("mode_multi", "n" to arquivosSelecionados.size)
         else -> tr("mode_batch")
     }
@@ -389,7 +388,6 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Cabeçalho
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -411,7 +409,6 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
                 }
             }
 
-            // Card Pasta de Trabalho
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -445,7 +442,6 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
                 }
             }
 
-            // Card Alvo (Lote ou Arquivos Selecionados)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -488,7 +484,6 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
                 }
             }
 
-            // Card Preset Ativo
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -537,7 +532,6 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
                 }
             }
 
-            // Botões Empilhados: START CONVERSION em cima, REMUX MKV logo abaixo
             Button(
                 onClick = { iniciarLote("ffmpeg") },
                 enabled = !ocupado,
@@ -572,7 +566,7 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
                 )
             }
 
-                        if (ocupado) {
+            if (ocupado) {
                 Button(
                     onClick = {
                         if (!cancelarFlag.get()) {
@@ -595,7 +589,6 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
                 }
             }
 
-            // Status e Barra de Progresso
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(statusTexto, fontSize = 12.sp, color = Color(0xFFB0BEC5))
                 LinearProgressIndicator(
@@ -606,7 +599,6 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
                 )
             }
 
-            // Console de Logs
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -624,7 +616,6 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
         }
     }
 
-    // Diálogo de Permissão de Armazenamento Total
     if (mostrarDlgPerm) {
         AlertDialog(
             onDismissRequest = { mostrarDlgPerm = false },
@@ -653,7 +644,6 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
         )
     }
 
-    // Diálogo Gerenciador de Presets
     if (mostrarDlgPresets) {
         var editIdx by remember { mutableStateOf<Int?>(null) }
         var nomeInp by remember { mutableStateOf("") }
@@ -665,7 +655,7 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
             title = { Text(tr("dlg_title"), fontSize = 16.sp, fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LazyColumn(modifier = Modifier.height(150.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LazyColumn(modifier = Modifier.height(145.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(presets.size) { i ->
                             val p = presets[i]
                             Row(
@@ -702,51 +692,56 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
                     }
 
                     HorizontalDivider(color = Color(0xFF2C303A))
-                    OutlinedTextField(value = nomeInp, onValueChange = { nomeInp = it }, label = { Text(tr("name_lbl"), fontSize = 12.sp) }, singleLine = true)
-                    OutlinedTextField(value = extInp, onValueChange = { extInp = it }, label = { Text(tr("ext_lbl"), fontSize = 12.sp) }, singleLine = true)
-                    OutlinedTextField(value = argsInp, onValueChange = { argsInp = it }, label = { Text(tr("args_lbl"), fontSize = 12.sp) }, maxLines = 3)
+                    OutlinedTextField(value = nomeInp, onValueChange = { nomeInp = it }, label = { Text(tr("name_lbl"), fontSize = 12.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = extInp, onValueChange = { extInp = it }, label = { Text(tr("ext_lbl"), fontSize = 12.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = argsInp, onValueChange = { argsInp = it }, label = { Text(tr("args_lbl"), fontSize = 12.sp) }, maxLines = 3, modifier = Modifier.fillMaxWidth())
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        @OptIn(ExperimentalLayoutApi::class)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Button(onClick = {
-                            val n = nomeInp.trim()
-                            var e = extInp.trim()
-                            val a = argsInp.trim()
-                            if (n.isNotEmpty() && e.isNotEmpty() && a.isNotEmpty()) {
-                                if (!e.startsWith(".")) e = ".$e"
-                                val nova = presets.toMutableList()
-                                if (editIdx != null && editIdx!! in nova.indices) {
-                                    nova[editIdx!!] = PresetItem(n, e, a)
-                                    editIdx = null
-                                } else {
-                                    nova.add(PresetItem(n, e, a))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                val n = nomeInp.trim()
+                                var e = extInp.trim()
+                                val a = argsInp.trim()
+                                if (n.isNotEmpty() && e.isNotEmpty() && a.isNotEmpty()) {
+                                    if (!e.startsWith(".")) e = ".$e"
+                                    val nova = presets.toMutableList()
+                                    if (editIdx != null && editIdx!! in nova.indices) {
+                                        nova[editIdx!!] = PresetItem(n, e, a)
+                                        editIdx = null
+                                    } else {
+                                        nova.add(PresetItem(n, e, a))
+                                    }
+                                    PresetsManager.salvarPresets(context, nova)
+                                    presets = nova
+                                    nomeInp = ""; extInp = ""; argsInp = ""
                                 }
+                            }
+                        ) { Text(tr("save"), fontSize = 12.sp) }
+
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                val existentes = presets.map { it.nome }.toSet()
+                                val nova = presets.toMutableList()
+                                PresetsManager.PRESETS_PADRAO.forEach { if (it.nome !in existentes) nova.add(it) }
                                 PresetsManager.salvarPresets(context, nova)
                                 presets = nova
-                                nomeInp = ""; extInp = ""; argsInp = ""
+                                addLog(tr("restored"), Color(0xFF81C784))
                             }
-                        }) { Text(tr("save"), fontSize = 12.sp) }
+                        ) { Text(tr("restore"), fontSize = 12.sp) }
+                    }
 
-                        TextButton(onClick = {
-                            val existentes = presets.map { it.nome }.toSet()
-                            val nova = presets.toMutableList()
-                            PresetsManager.PRESETS_PADRAO.forEach { if (it.nome !in existentes) nova.add(it) }
-                            PresetsManager.salvarPresets(context, nova)
-                            presets = nova
-                            addLog(tr("restored"), Color(0xFF81C784))
-                        }) { Text(tr("restore"), fontSize = 12.sp) }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f),
+                            onClick = { importPicker.launch(arrayOf("application/json", "*/*")) }
+                        ) { Text(tr("import"), fontSize = 12.sp) }
 
-                        TextButton(onClick = { importPicker.launch(arrayOf("application/json", "*/*")) }) {
-                            Text(tr("import"), fontSize = 12.sp)
-                        }
-                        TextButton(onClick = { exportPicker.launch(null) }) {
-                            Text(tr("export"), fontSize = 12.sp)
-                        }
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f),
+                            onClick = { exportPicker.launch(null) }
+                        ) { Text(tr("export"), fontSize = 12.sp) }
                     }
                 }
             },
