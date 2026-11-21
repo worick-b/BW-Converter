@@ -22,25 +22,88 @@ object MediaEngines {
      * Converte Uri do seletor do Android (OpenMultipleDocuments ou OpenDocumentTree)
      * diretamente para o File real em /storage/emulated/0 sem copiar no cache!
      */
-    fun resolverUriParaArquivo(uri: Uri): File? {
+    fun resolverUriParaArquivo(context: Context, uri: Uri): File? {
         if ("file".equals(uri.scheme, ignoreCase = true)) {
             return uri.path?.let { File(it) }
         }
         try {
-            val docId = when {
-                DocumentsContract.isDocumentUri(null, uri) -> DocumentsContract.getDocumentId(uri)
-                else -> DocumentsContract.getTreeDocumentId(uri)
-            }
-            val partes = docId.split(":", limit = 2)
-            val tipo = partes[0]
-            val relPath = if (partes.size > 1) partes[1] else ""
-            if ("primary".equals(tipo, ignoreCase = true)) {
-                val base = Environment.getExternalStorageDirectory()
-                return if (relPath.isEmpty()) base else File(base, relPath)
-            } else if (tipo.isNotEmpty()) {
+            if (DocumentsContract.isDocumentUri(context, uri)) {
+                val docId = DocumentsContract.getDocumentId(uri)
+                val partes = docId.split(":", limit = 2)
+                val tipo = partes
+                val idOuPath = if (partes.size > 1) partes else ""
+
+                // 1. Armazenamento externo / cartão SD (primary:Download/video.mp4)
+                if ("primary".equals(tipo, ignoreCase = true)) {
+                    val base = Environment.getExternalStorageDirectory()
+                    return if (idOuPath.isEmpty()) base else File(base, idOuPath)
+                }
+                if ("raw".equals(tipo, ignoreCase = true) && idOuPath.isNotEmpty()) {
+                    return File(idOuPath)
+                }
                 val sd = File("/storage/$tipo")
-                if (sd.exists()) {
+                if (tipo.isNotEmpty() && sd.exists()) {
+                    return if (idOuPath.isEmpty()) sd else File(sd, idOuPath)
+                }
+
+                // 2. MediaStore Documents (video:123, audio:456, image:789, document:101)
+                val contentUri = when (tipo.lowercase()) {
+                    "video" -> android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                    "audio" -> android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                    "image" -> android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                    "document" -> android.provider.MediaStore.Files.getContentUri("external")
+                    else -> null
+                }
+                if (contentUri != null && idOuPath.isNotEmpty()) {
+                    context.contentResolver.query(
+                        contentUri,
+                        arrayOf(android.provider.MediaStore.MediaColumns.DATA),
+                        "_id=?",
+                        arrayOf(idOuPath),
+                        null
+                    )?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val col = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.DATA)
+                            if (col >= 0) {
+                                val path = cursor.getString(col)
+                                if (!path.isNullOrEmpty()) return File(path)
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Árvore de diretório (OpenDocumentTree)
+                val treeId = DocumentsContract.getTreeDocumentId(uri)
+                val partes = treeId.split(":", limit = 2)
+                val tipo = partes
+                val relPath = if (partes.size > 1) partes else ""
+                if ("primary".equals(tipo, ignoreCase = true)) {
+                    val base = Environment.getExternalStorageDirectory()
+                    return if (relPath.isEmpty()) base else File(base, relPath)
+                }
+                val sd = File("/storage/$tipo")
+                if (tipo.isNotEmpty() && sd.exists()) {
                     return if (relPath.isEmpty()) sd else File(sd, relPath)
+                }
+            }
+        } catch (_: Exception) {
+        }
+
+        // Fallback genérico via coluna _data
+        try {
+            context.contentResolver.query(
+                uri,
+                arrayOf(android.provider.MediaStore.MediaColumns.DATA),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val col = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.DATA)
+                    if (col >= 0) {
+                        val path = cursor.getString(col)
+                        if (!path.isNullOrEmpty()) return File(path)
+                    }
                 }
             }
         } catch (_: Exception) {
