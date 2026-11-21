@@ -29,8 +29,8 @@ jobs:
           mkdir -p tmp_bins
 
           # FFmpeg 8.1 Static (arm64-v8a e armeabi-v7a)
-          curl -L -o tmp_bins/ff_v8.zip "https://github.com"
-          curl -L -o tmp_bins/ff_v7.zip "https://github.com"
+          curl -fL -o tmp_bins/ff_v8.zip "https://github.com/xonev8/FFmpeg-Android"
+          curl -fL -o tmp_bins/ff_v7.zip "https://github.com/xonev8/FFmpeg-Android"
 
           unzip -o tmp_bins/ff_v8.zip -d tmp_bins/ff_v8
           unzip -o tmp_bins/ff_v7.zip -d tmp_bins/ff_v7
@@ -38,8 +38,8 @@ jobs:
           cp -f tmp_bins/ff_v7/libffmpeg_bin.so app/src/main/jniLibs/armeabi-v7a/libffmpeg_bin.so
 
           # MKVToolNix 57.0.0 Static (arm64-v8a e armeabi-v7a)
-          curl -L -o tmp_bins/mkv_v8.zip "https://github.com"
-          curl -L -o tmp_bins/mkv_v7.zip "https://github.com"
+          curl -fL -o tmp_bins/mkv_v8.zip "https://github.com/xonev8/MKVToolNix-Android"
+          curl -fL -o tmp_bins/mkv_v7.zip "https://github.com/xonev8/MKVToolNix-Android"
 
           unzip -o tmp_bins/mkv_v8.zip -d tmp_bins/mkv_v8
           unzip -o tmp_bins/mkv_v7.zip -d tmp_bins/mkv_v7
@@ -53,9 +53,9 @@ jobs:
 
       - name: Gerar Ícones Adaptativos do App (Pillow)
         run: |
-          python3 -m pip install --quiet pillow
+          python3 -m pip install --quiet --break-system-packages pillow
           python3 generate_icons.py
-      
+
       - name: Gerar Gradle Wrapper e Compilar APKs Release
         run: |
           gradle wrapper --gradle-version 8.11.1
