@@ -51,6 +51,11 @@ jobs:
           ls -lh app/src/main/jniLibs/arm64-v8a/
           ls -lh app/src/main/jniLibs/armeabi-v7a/
 
+      - name: Gerar Ícones Adaptativos do App (Pillow)
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 generate_icons.py
+      
       - name: Gerar Gradle Wrapper e Compilar APKs Release
         run: |
           gradle wrapper --gradle-version 8.11.1
