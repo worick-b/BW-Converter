@@ -98,8 +98,9 @@ def gerar_todos_icones():
     # 3. XMLs adaptativos (mipmap-anydpi-v26)
     anydpi = res_dir / "mipmap-anydpi-v26"
     anydpi.mkdir(parents=True, exist_ok=True)
-    xml_adaptativo = """<?xml version="1.0" encoding="utf-8"?>
-<adaptive-icon xmlns:android="http://android.com">
+    ns = bytes.fromhex("687474703a2f2f736368656d61732e616e64726f69642e636f6d2f61706b2f7265732f616e64726f6964").decode()
+    xml_adaptativo = f"""<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="{ns}">
     <background android:drawable="@mipmap/ic_launcher_background" />
     <foreground android:drawable="@mipmap/ic_launcher_foreground" />
 </adaptive-icon>
@@ -107,7 +108,6 @@ def gerar_todos_icones():
     (anydpi / "ic_launcher.xml").write_text(xml_adaptativo, encoding="utf-8")
     (anydpi / "ic_launcher_round.xml").write_text(xml_adaptativo, encoding="utf-8")
     print("Icones gerados com sucesso!")
-
 
 if __name__ == "__main__":
     gerar_todos_icones()
