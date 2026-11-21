@@ -61,7 +61,7 @@ jobs:
       - name: Garantir AndroidManifest.xml válido
         run: |
           python3 -c '
-          ns = "http://schemas." + "://android.com"
+          ns = "http://android.com" + "/apk/res/android"
           xml = f"""<?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="{ns}">
               <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
