@@ -79,7 +79,7 @@ private val TEXTOS_PT = mapOf(
     "imported" to "[✓] {n} preset(s) importado(s).",
     "restored" to "[✓] Presets padrão restaurados.",
     "perm_title" to "Permissão de Arquivos Necessária",
-    "perm_desc" to "Ative 'Acesso a todos os arquivos' para ler e salvar ao lado dos arquivos originais.\n\n(Configurações > Acesso a todos os arquivos)",
+    "perm_desc" to "Ative 'Acesso a todos os arquivos' para ler e salvar os arquivos.\n\n(Configurações > Acesso a todos os arquivos)",
     "open_settings" to "Abrir Configurações"
 )
 
@@ -88,8 +88,8 @@ private val TEXTOS_EN = mapOf(
     "folder_btn" to "Folder",
     "mode_batch" to "Batch Mode: Entire working folder",
     "mode_single" to "Single File: {name}",
-    "mode_multi" to "Selected Files: {n} file(s)",
-    "pick_file" to "Select File(s)",
+    "mode_multi" to "Selected Files: {n} files",
+    "pick_file" to "Single File: Select Files",
     "preset_lbl" to "Active Preset",
     "manage_tip" to "Manage Presets",
     "start_btn" to "START CONVERSION",
