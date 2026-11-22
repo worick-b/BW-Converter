@@ -150,7 +150,7 @@ class MainActivity : Activity() {
             }
 
             val nativeDir = applicationInfo.nativeLibraryDir
-            val binPath = if (motorIdx == 0) "$nativeDir/libffmpeg.so" else "$nativeDir/libmkvmerge.so"
+            val binPath = if (motorIdx == 0) "$nativeDir/libffmpeg_bin.so" else "$nativeDir/libmkvmerge_bin.so"
             var converted = 0
 
             for ((index, inputFile) in files.withIndex()) {
