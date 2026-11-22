@@ -389,9 +389,8 @@ fun AbwConverterScreen(onKeepScreenOn: (Boolean) -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("ABW Converter", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFCE93D8))
+                Text("ABetterWay Converter", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFCE93D8))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(tr("subtitle"), fontSize = 12.sp, color = Color(0xFF78909C))
                     TextButton(
                         onClick = {
                             lang = if (lang == "pt") "en" else "pt"
