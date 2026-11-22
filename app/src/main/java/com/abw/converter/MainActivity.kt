@@ -54,7 +54,7 @@ private val TEXTOS_PT = mapOf(
     "cancel_btn" to "CANCELAR",
     "canceling" to "Cancelando operação...",
     "canceled" to "[!] Operação cancelada pelo usuário.",
-    "ready" to "Pronto. Salvo em conv_abw",
+    "ready" to "[✓] Salvo em conv_abw",
     "status_ready" to "Pronto para converter.",
     "wait" to "[!] Aguarde a tarefa atual terminar.",
     "no_ffmpeg" to "[-] FFmpeg embutido (libffmpeg_bin.so) não encontrado!",
@@ -99,7 +99,7 @@ private val TEXTOS_EN = mapOf(
     "cancel_btn" to "CANCEL",
     "canceling" to "Canceling operation...",
     "canceled" to "[!] Operation canceled by user.",
-    "ready" to "Ready. Output saved to conv_abw",
+    "ready" to "[✓] Output saved to conv_abw",
     "status_ready" to "Ready to convert.",
     "wait" to "[!] Wait for the current task to finish.",
     "no_ffmpeg" to "[-] Embedded FFmpeg (libffmpeg_bin.so) not found!",
@@ -124,7 +124,7 @@ private val TEXTOS_EN = mapOf(
     "imported" to "[✓] Imported {n} preset(s).",
     "restored" to "[✓] Default presets restored.",
     "perm_title" to "Storage Permission Required",
-    "perm_desc" to "Allow 'All files access' to read and save next to original files.\n\n(Settings > All files access)",
+    "perm_desc" to "Allow 'All files access' to read and save files.\n\n(Settings > All files access)",
     "open_settings" to "Open Settings"
 )
 
