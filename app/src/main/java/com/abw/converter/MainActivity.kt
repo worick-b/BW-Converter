@@ -39,7 +39,6 @@ import kotlin.concurrent.thread
 data class LogLine(val text: String, val color: Color)
 
 private val TEXTOS_PT = mapOf(
-    "subtitle" to "FFmpeg 8.1 + MKVToolNix",
     "work_folder" to "Pasta de Trabalho:",
     "folder_btn" to "Pasta",
     "mode_batch" to "Modo Lote: Toda a pasta de trabalho",
@@ -85,7 +84,6 @@ private val TEXTOS_PT = mapOf(
 )
 
 private val TEXTOS_EN = mapOf(
-    "subtitle" to "FFmpeg 8.1 + MKVToolNix",
     "work_folder" to "Working Folder:",
     "folder_btn" to "Folder",
     "mode_batch" to "Batch Mode: Entire working folder",
