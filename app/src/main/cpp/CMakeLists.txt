@@ -4,14 +4,16 @@ project("abw_ui")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(SHAWARMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/ShawarmaUI")
+
 add_library(abw_ui SHARED
     abw_ui.cpp
-    nanovg/nanovg.c
+    "${SHAWARMA_DIR}/third_party/nanovg/nanovg.c"
 )
 
 target_include_directories(abw_ui PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/nanovg
+    "${SHAWARMA_DIR}/include"
+    "${SHAWARMA_DIR}/third_party/nanovg"
 )
 
 target_compile_options(abw_ui PRIVATE -O3 -fvisibility=hidden)
