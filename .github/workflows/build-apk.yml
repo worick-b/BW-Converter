@@ -78,7 +78,7 @@ jobs:
                   android:allowBackup="true"
                   android:icon="@mipmap/ic_launcher"
                   android:roundIcon="@mipmap/ic_launcher_round"
-                  android:label="ABetterWay Converter"
+                  android:label="BetterWay Converter"
                   android:requestLegacyExternalStorage="true"
                   android:extractNativeLibs="true"
                   android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
@@ -119,8 +119,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v2.1.0
-          name: ABetterWay Converter v2.1.0 (ShawarmaUI)
+          name: BetterWay Converter v2.1.0 (ShawarmaUI)
           body: |
-            APK universal (`arm64-v8a` + `armeabi-v7a`) do **ABetterWay Converter** com interface nativa em C++ (**ShawarmaUI + OpenGL ES 3.0**), **FFmpeg 8.1** e **MKVToolNix 57.0.0** embutidos:
+            APK universal (`arm64-v8a` + `armeabi-v7a`) do **BetterWay Converter** com interface nativa em C++ (**ShawarmaUI + OpenGL ES 3.0**), **FFmpeg 8.1** e **MKVToolNix 57.0.0** embutidos:
             - `betterway-converter.apk`
           files: dist_apks/betterway-converter.apk
