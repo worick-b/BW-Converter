@@ -1,4 +1,4 @@
-package com.abw.converter
+package com.bw.converter
 
 import android.app.Activity
 import android.content.Context
@@ -27,7 +27,7 @@ import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
     companion object {
-        init { System.loadLibrary("abw_ui") }
+        init { System.loadLibrary("bw_ui") }
         private const val REQ_PICK_FILE = 1001
         private const val REQ_PICK_FOLDER = 1002
     }
@@ -156,7 +156,7 @@ class MainActivity : Activity() {
             for ((index, inputFile) in files.withIndex()) {
                 if (cancelFlag.get()) break
 
-                val outDir = File(inputFile.parentFile, "conv_abw").apply { mkdirs() }
+                val outDir = File(inputFile.parentFile, "conv_bw").apply { mkdirs() }
                 val outExt = if (motorIdx == 0) ext else ".mkv"
                 val outFile = File(outDir, "${inputFile.nameWithoutExtension}$outExt")
 
