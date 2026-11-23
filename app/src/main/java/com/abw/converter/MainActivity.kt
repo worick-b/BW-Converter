@@ -88,6 +88,7 @@ class MainActivity : Activity() {
         super.onResume()
         glView.onResume()
         glView.requestRender()
+        glView.startBackdropTick()
     }
 
     override fun onPause() {
@@ -347,7 +348,15 @@ class MainActivity : Activity() {
 
     inner class ShawarmaGLView(ctx: Context) : GLSurfaceView(ctx), GLSurfaceView.Renderer {
         private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-        private val backdropTick = Runnable { requestRender() }
+        private var isRunning = false
+
+        private val backdropTick = object : Runnable {
+            override fun run() {
+                if (!isRunning) return
+                requestRender()
+                mainHandler.postDelayed(this, 100L) // Reagenda a si mesmo a cada 100ms (~10 FPS) sem nunca parar!
+            }
+        }
 
         init {
             setEGLContextClientVersion(3)
@@ -358,7 +367,16 @@ class MainActivity : Activity() {
             isFocusableInTouchMode = true
         }
 
+        fun startBackdropTick() {
+            if (!isRunning) {
+                isRunning = true
+                mainHandler.removeCallbacks(backdropTick)
+                mainHandler.postDelayed(backdropTick, 100L)
+            }
+        }
+
         fun stopBackdropTick() {
+            isRunning = false
             mainHandler.removeCallbacks(backdropTick)
         }
 
@@ -384,10 +402,7 @@ class MainActivity : Activity() {
         }
 
         override fun onDrawFrame(gl: GL10?) {
-            if (nativeRender()) {
-                mainHandler.removeCallbacks(backdropTick)
-                mainHandler.postDelayed(backdropTick, 100L) // Roda direto na Main Thread, nunca falha!
-            }
+            nativeRender()
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
