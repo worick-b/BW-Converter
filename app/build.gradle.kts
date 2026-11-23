@@ -37,7 +37,7 @@ android {
             isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "${rootDir}/third_party/ShawarmaUI/android/proguard-rules.pro"
             )
             signingConfig = signingConfigs.getByName("debug")
         }
