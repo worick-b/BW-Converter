@@ -18,6 +18,7 @@ struct PresetItem {
 
 struct AppConverterState {
     bool isPtBr = true;
+    int temaIdx = 0;            // 0 = Gold, 1 = Red, 2 = Purple, 3 = Light
     int abaAtual = 0;           // 0 = Converter, 1 = Presets, 2 = Log
     int modoLote = 0;           // 0 = Arquivo Unico, 1 = Pasta (Lote)
     int motorIdx = 0;           // 0 = FFmpeg 8.1, 1 = MKVMerge 57.0
@@ -51,6 +52,15 @@ static jmethodID g_midCancelConvert = nullptr;
 static jmethodID g_midSavePresetsJson = nullptr;
 static jmethodID g_midImportPresets = nullptr;
 static jmethodID g_midExportPresets = nullptr;
+static jmethodID g_midSavePrefs = nullptr;
+
+static void AplicarTemaPorIndice(int idx) {
+    g_app.temaIdx = ((idx % 4) + 4) % 4;
+    if (g_app.temaIdx == 0) g_ui.ApplyTheme(ShawarmaUI::Theme::ShawarmaGold);
+    else if (g_app.temaIdx == 1) g_ui.ApplyTheme(ShawarmaUI::Theme::NeonRed);
+    else if (g_app.temaIdx == 2) g_ui.ApplyTheme(ShawarmaUI::Theme::CyberPurple);
+    else g_ui.ApplyTheme(ShawarmaUI::Theme::LightClean);
+}
 
 static int g_width = 0;
 static int g_height = 0;
@@ -264,11 +274,35 @@ static void RenderBetterWayUI() {
     ShawarmaUI::Color neutralBtn(52, 47, 44);
     ShawarmaUI::Color neutralHover(68, 61, 57);
 
-    // Cabeçalho com título BetterWay Converter e botão rápido EN / PT-BR
+    // Cabeçalho com título BetterWay Converter, botão de Tema e botão EN / PT-BR
     g_ui.AlignText().Text("BetterWay Converter", true);
+
+    static const char* kThemeNames[] = { "Gold", "Red", "Cyber", "Light" };
+    g_ui.SameLineRight(136);
+    if (g_ui.Button(kThemeNames[g_app.temaIdx], 66, 30, neutralBtn, neutralHover)) {
+        AplicarTemaPorIndice(g_app.temaIdx + 1);
+        if (g_jvm && g_activityObj && g_midSavePrefs) {
+            JNIEnv* env = nullptr;
+            if (g_jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_OK) {
+                env->CallVoidMethod(g_activityObj, g_midSavePrefs,
+                                    static_cast<jboolean>(g_app.isPtBr),
+                                    static_cast<jint>(g_app.temaIdx));
+            }
+        }
+        g_ui.Toast(std::string(Tr("Tema: ", "Theme: ")) + kThemeNames[g_app.temaIdx], goldTitle);
+    }
+
     g_ui.SameLineRight(64);
     if (g_ui.Button(g_app.isPtBr ? "PT-BR" : "EN", 64, 30, neutralBtn, neutralHover)) {
         g_app.isPtBr = !g_app.isPtBr;
+        if (g_jvm && g_activityObj && g_midSavePrefs) {
+            JNIEnv* env = nullptr;
+            if (g_jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_OK) {
+                env->CallVoidMethod(g_activityObj, g_midSavePrefs,
+                                    static_cast<jboolean>(g_app.isPtBr),
+                                    static_cast<jint>(g_app.temaIdx));
+            }
+        }
         g_ui.Toast(g_app.isPtBr ? "Idioma: Portugues (BR)" : "Language: English", goldTitle);
     }
 
@@ -453,7 +487,7 @@ static void RenderBetterWayUI() {
 extern "C" {
 
 JNIEXPORT void JNICALL
-Java_com_bw_converter_MainActivity_nativeInit(JNIEnv* env, jobject thiz, jfloat density, jboolean isPtBr) {
+Java_com_bw_converter_MainActivity_nativeInit(JNIEnv* env, jobject thiz, jfloat density, jboolean isPtBr, jint savedTheme) {
     env->GetJavaVM(&g_jvm);
     if (g_activityObj) env->DeleteGlobalRef(g_activityObj);
     g_activityObj = env->NewGlobalRef(thiz);
@@ -467,6 +501,7 @@ Java_com_bw_converter_MainActivity_nativeInit(JNIEnv* env, jobject thiz, jfloat 
     g_midSavePresetsJson = env->GetMethodID(cls, "savePresetsJsonFromNative", "(Ljava/lang/String;)V");
     g_midImportPresets   = env->GetMethodID(cls, "importPresetsFromNative", "()V");
     g_midExportPresets   = env->GetMethodID(cls, "exportPresetsFromNative", "(Ljava/lang/String;)V");
+    g_midSavePrefs       = env->GetMethodID(cls, "savePrefsFromNative", "(ZI)V");
 
     if (g_vg) {
         nvgDeleteGLES3(g_vg);
@@ -475,7 +510,7 @@ Java_com_bw_converter_MainActivity_nativeInit(JNIEnv* env, jobject thiz, jfloat 
     g_vg = nvgCreateGLES3(NVG_ANTIALIAS | NVG_STENCIL_STROKES);
     g_ui.InitGLES3(g_vg, density);
     g_ui.LoadIconFontFromMemory(ShawarmaUI::kIconFontTTF.data(), static_cast<int>(ShawarmaUI::kIconFontTTF.size()));
-    g_ui.ApplyTheme(ShawarmaUI::Theme::ShawarmaGold);
+    AplicarTemaPorIndice(savedTheme);
 
     g_app.isPtBr = (isPtBr == JNI_TRUE);
     if (g_app.presets.empty()) {
