@@ -33,7 +33,7 @@ class MainActivity : Activity() {
         private const val REQ_EXPORT_JSON = 1004
     }
 
-    private external fun nativeInit(density: Float, isPtBr: Boolean)
+    private external fun nativeInit(density: Float, isPtBr: Boolean, savedTheme: Int)
     private external fun nativeResize(w: Int, h: Int, topInset: Int, bottomInset: Int)
     private external fun nativeRender(): Boolean
     private external fun nativeTouch(action: Int, x: Int, y: Int)
@@ -131,6 +131,14 @@ class MainActivity : Activity() {
         try {
             File(filesDir, "presets.json").writeText(jsonStr, Charsets.UTF_8)
         } catch (_: Exception) {}
+    }
+
+    fun savePrefsFromNative(isPtBr: Boolean, themeIdx: Int) {
+        getSharedPreferences("bw_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("is_pt_br", isPtBr)
+            .putInt("theme_idx", themeIdx)
+            .apply()
     }
 
     fun importPresetsFromNative() {
@@ -354,8 +362,12 @@ class MainActivity : Activity() {
         }
 
         override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
-            val isPt = Locale.getDefault().language.startsWith("pt", ignoreCase = true)
-            nativeInit(resources.displayMetrics.density, isPt)
+            val prefs = getSharedPreferences("bw_prefs", Context.MODE_PRIVATE)
+            val defaultPt = Locale.getDefault().language.startsWith("pt", ignoreCase = true)
+            val isPt = prefs.getBoolean("is_pt_br", defaultPt)
+            val savedTheme = prefs.getInt("theme_idx", 0)
+
+            nativeInit(resources.displayMetrics.density, isPt, savedTheme)
 
             val savedFile = File(filesDir, "presets.json")
             if (savedFile.exists()) {
