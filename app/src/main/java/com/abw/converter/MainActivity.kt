@@ -16,7 +16,6 @@ import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
-import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.util.Locale
@@ -83,6 +82,18 @@ class MainActivity : Activity() {
                 startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        glView.onResume()
+        glView.requestRender()
+    }
+
+    override fun onPause() {
+        glView.stopBackdropTick()
+        glView.onPause()
+        super.onPause()
     }
 
     fun requestRenderFromNative() {
@@ -209,9 +220,9 @@ class MainActivity : Activity() {
             val rxMkvProg = Regex("""Progress:\s*(\d+)%""")
 
             fun parseSeconds(m: MatchResult): Double {
-                val h = m.groupValues[1].toDoubleOrNull() ?: 0.0
-                val min = m.groupValues[2].toDoubleOrNull() ?: 0.0
-                val sec = m.groupValues[3].toDoubleOrNull() ?: 0.0
+                val h = m.groupValues.getOrNull(1)?.toDoubleOrNull() ?: 0.0
+                val min = m.groupValues.getOrNull(2)?.toDoubleOrNull() ?: 0.0
+                val sec = m.groupValues.getOrNull(3)?.toDoubleOrNull() ?: 0.0
                 return h * 3600.0 + min * 60.0 + sec
             }
 
@@ -244,7 +255,6 @@ class MainActivity : Activity() {
                     val proc = pb.start()
                     currentProcess = proc
 
-                    // FFmpeg usa '\r' para atualizar progresso na mesma linha; lemos caractere a caractere por linha/\r
                     val reader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
                     val sb = StringBuilder()
                     var chInt: Int
@@ -272,7 +282,7 @@ class MainActivity : Activity() {
                                     }
                                 } else {
                                     rxMkvProg.find(line)?.let { m ->
-                                        val pInt = m.groupValues[1].toIntOrNull() ?: 0
+                                        val pInt = m.groupValues.getOrNull(1)?.toIntOrNull() ?: 0
                                         fileRatio = (pInt / 100f).coerceIn(0f, 1f)
                                     }
                                 }
@@ -328,6 +338,8 @@ class MainActivity : Activity() {
     }
 
     inner class ShawarmaGLView(ctx: Context) : GLSurfaceView(ctx), GLSurfaceView.Renderer {
+        private val backdropTick = Runnable { requestRender() }
+
         init {
             setEGLContextClientVersion(3)
             setEGLConfigChooser(8, 8, 8, 8, 16, 8)
@@ -335,6 +347,10 @@ class MainActivity : Activity() {
             renderMode = RENDERMODE_WHEN_DIRTY
             isFocusable = true
             isFocusableInTouchMode = true
+        }
+
+        fun stopBackdropTick() {
+            removeCallbacks(backdropTick)
         }
 
         override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -355,7 +371,10 @@ class MainActivity : Activity() {
         }
 
         override fun onDrawFrame(gl: GL10?) {
-            if (nativeRender()) requestRender()
+            if (nativeRender()) {
+                removeCallbacks(backdropTick)
+                postDelayed(backdropTick, 100L) // ~10 FPS para animação do fundo
+            }
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
