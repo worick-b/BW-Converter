@@ -15,11 +15,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Baixar ShawarmaUI
-        uses: actions/checkout@v4
-        with:
-          repository: xonev8/ShawarmaUI
-          path: third_party/ShawarmaUI
-          clean: false
+        run: |
+          rm -rf third_party/ShawarmaUI
+          git clone --depth 1 https://github.com/xonev8/ShawarmaUI third_party/ShawarmaUI
 
       - name: Configurar Java 17
         uses: actions/setup-java@v4
@@ -92,7 +90,6 @@ jobs:
                       <intent-filter>
                           <action android:name="android.intent.category.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
-                          <category android:name="android.intent.category.DEFAULT" />
                       </intent-filter>
                   </activity>
               </application>
