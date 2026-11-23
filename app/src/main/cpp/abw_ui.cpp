@@ -326,7 +326,7 @@ Java_com_abw_converter_MainActivity_nativeInit(JNIEnv* env, jobject thiz, jfloat
     }
     g_vg = nvgCreateGLES3(NVG_ANTIALIAS | NVG_STENCIL_STROKES);
     g_ui.InitGLES3(g_vg, density);
-    g_ui.ApplyTheme(ShawarmaUI::Theme::DarkBlue);
+    g_ui.ApplyTheme(ShawarmaUI::Theme::ShawarmaGold);
 
     g_app.isPtBr = (isPtBr == JNI_TRUE);
     if (g_app.presets.empty()) {
