@@ -29,10 +29,7 @@ Lightweight, fast, and offline audio & video converter for Android powered by **
 ---
 
 ## Installation
-
-1. Go to the **[Releases](../../releases)** page and download the APK matching your device architecture:
-   * **`arm64-v8a`**: Recommended for modern 64-bit Android devices (Android 10–14+).
-   * **`armeabi-v7a`**: For older 32-bit Android devices.
-2. Install the APK and grant **"All files access"** permission when prompted so the app can read your media folders and save converted files.
+- Go to the **[Releases](../../releases)** page and download the APK
+- Install the APK and grant **"All files access"** permission when prompted so the app can read your media folders and save converted files.
 
 ---
