@@ -346,6 +346,7 @@ class MainActivity : Activity() {
     }
 
     inner class ShawarmaGLView(ctx: Context) : GLSurfaceView(ctx), GLSurfaceView.Renderer {
+        private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
         private val backdropTick = Runnable { requestRender() }
 
         init {
@@ -358,7 +359,7 @@ class MainActivity : Activity() {
         }
 
         fun stopBackdropTick() {
-            removeCallbacks(backdropTick)
+            mainHandler.removeCallbacks(backdropTick)
         }
 
         override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -384,8 +385,8 @@ class MainActivity : Activity() {
 
         override fun onDrawFrame(gl: GL10?) {
             if (nativeRender()) {
-                removeCallbacks(backdropTick)
-                postDelayed(backdropTick, 100L) // ~10 FPS para animação do fundo
+                mainHandler.removeCallbacks(backdropTick)
+                mainHandler.postDelayed(backdropTick, 100L) // Roda direto na Main Thread, nunca falha!
             }
         }
 
