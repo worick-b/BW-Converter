@@ -62,7 +62,7 @@ jobs:
           python3 -m pip install --quiet --break-system-packages pillow
           python3 generate_icons.py
 
-      - name: Garantir AndroidManifest.xml válido
+            - name: Garantir AndroidManifest.xml válido
         run: |
           python3 -c '
           import textwrap
@@ -84,6 +84,8 @@ jobs:
                   android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
                   <activity
                       android:name=".MainActivity"
+                      android:icon="@mipmap/ic_launcher"
+                      android:roundIcon="@mipmap/ic_launcher_round"
                       android:exported="true"
                       android:windowSoftInputMode="adjustResize"
                       android:configChanges="orientation|screenSize|keyboardHidden">
