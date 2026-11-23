@@ -17,7 +17,7 @@ jobs:
         run: |
           if [ ! -f "third_party/ShawarmaUI/include/ShawarmaUI_Android.h" ]; then
             rm -rf third_party/ShawarmaUI
-            git clone --depth 1 https://github.com third_party/ShawarmaUI
+            git clone --depth 1 https://github.com/xonev8/ShawarmaUI third_party/ShawarmaUI
           fi
 
       - name: Configurar Java 17
