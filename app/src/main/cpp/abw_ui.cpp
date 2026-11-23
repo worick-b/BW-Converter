@@ -130,7 +130,7 @@ static void DispararConversaoJNI() {
     if (attached) g_jvm->DetachCurrentThread();
 }
 
-static void RenderABWConverterUI() {
+static void RenderBWConverterUI() {
     bool isConverting = false;
     float progress = 0.0f;
     std::string statusCopy;
@@ -144,7 +144,7 @@ static void RenderABWConverterUI() {
     }
 
     // Cabeçalho com título e botão rápido de idioma EN / PT-BR
-    g_ui.AlignText().Text("ABW Converter", true);
+    g_ui.AlignText().Text("BW Converter", true);
     g_ui.SameLineRight(64);
     if (g_ui.Button(g_app.isPtBr ? "PT-BR" : "EN", 64, 30)) {
         g_app.isPtBr = !g_app.isPtBr;
@@ -208,7 +208,7 @@ static void RenderABWConverterUI() {
                     g_ui.Badge(Tr("Remux direto para .MKV (Sem perda de qualidade)", "Direct remux to .MKV (Lossless)"),
                                ShawarmaUI::Color(115, 224, 140));
                 }
-                g_ui.TextColored(g_ui.style.textDim, Tr("Saida salva na subpasta: conv_abw/", "Output saved to subfolder: conv_abw/"));
+                g_ui.TextColored(g_ui.style.textDim, Tr("Saida salva na subpasta: conv_bw/", "Output saved to subfolder: conv_bw/"));
             }
         }
 
@@ -307,7 +307,7 @@ static void RenderABWConverterUI() {
 extern "C" {
 
 JNIEXPORT void JNICALL
-Java_com_abw_converter_MainActivity_nativeInit(JNIEnv* env, jobject thiz, jfloat density, jboolean isPtBr) {
+Java_com_bw_converter_MainActivity_nativeInit(JNIEnv* env, jobject thiz, jfloat density, jboolean isPtBr) {
     env->GetJavaVM(&g_jvm);
     if (g_activityObj) env->DeleteGlobalRef(g_activityObj);
     g_activityObj = env->NewGlobalRef(thiz);
@@ -338,30 +338,30 @@ Java_com_abw_converter_MainActivity_nativeInit(JNIEnv* env, jobject thiz, jfloat
 }
 
 JNIEXPORT void JNICALL
-Java_com_abw_converter_MainActivity_nativeResize(JNIEnv*, jobject, jint w, jint h, jint topInset, jint bottomInset) {
+Java_com_bw_converter_MainActivity_nativeResize(JNIEnv*, jobject, jint w, jint h, jint topInset, jint bottomInset) {
     g_width = w;
     g_height = h;
     g_ui.SetSafeAreaInsets(topInset, bottomInset);
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_abw_converter_MainActivity_nativeRender(JNIEnv*, jobject) {
+Java_com_bw_converter_MainActivity_nativeRender(JNIEnv*, jobject) {
     if (g_width <= 0 || g_height <= 0) return JNI_FALSE;
     g_ui.BeginFrame(g_width, g_height);
-    RenderABWConverterUI();
+    RenderBWConverterUI();
     g_ui.EndFrame();
     return g_ui.HasActiveAnimations() ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL
-Java_com_abw_converter_MainActivity_nativeTouch(JNIEnv*, jobject, jint action, jint x, jint y) {
+Java_com_bw_converter_MainActivity_nativeTouch(JNIEnv*, jobject, jint action, jint x, jint y) {
     if (action == 0) g_ui.OnTouchDown(x, y);
     else if (action == 1) g_ui.OnTouchUp(x, y);
     else if (action == 2) g_ui.OnTouchMove(x, y);
 }
 
 JNIEXPORT void JNICALL
-Java_com_abw_converter_MainActivity_nativeTextCommit(JNIEnv* env, jobject, jstring text) {
+Java_com_bw_converter_MainActivity_nativeTextCommit(JNIEnv* env, jobject, jstring text) {
     const char* utf = env->GetStringUTFChars(text, nullptr);
     if (utf) {
         g_ui.OnTextCommit(utf);
@@ -370,7 +370,7 @@ Java_com_abw_converter_MainActivity_nativeTextCommit(JNIEnv* env, jobject, jstri
 }
 
 JNIEXPORT void JNICALL
-Java_com_abw_converter_MainActivity_nativeKeySpecial(JNIEnv*, jobject, jint code) {
+Java_com_bw_converter_MainActivity_nativeKeySpecial(JNIEnv*, jobject, jint code) {
     if (code == 1) g_ui.OnKeyBackspace();
     else if (code == 2) g_ui.OnKeyEnter();
 }
@@ -378,7 +378,7 @@ Java_com_abw_converter_MainActivity_nativeKeySpecial(JNIEnv*, jobject, jint code
 // --- CALLBACKS DO KOTLIN -> UI C++ ---
 
 JNIEXPORT void JNICALL
-Java_com_abw_converter_MainActivity_nativeSetSelectedPath(JNIEnv* env, jobject, jstring path) {
+Java_com_bw_converter_MainActivity_nativeSetSelectedPath(JNIEnv* env, jobject, jstring path) {
     const char* utf = env->GetStringUTFChars(path, nullptr);
     if (utf) {
         g_app.caminhoSelecionado = utf;
@@ -388,7 +388,7 @@ Java_com_abw_converter_MainActivity_nativeSetSelectedPath(JNIEnv* env, jobject, 
 }
 
 JNIEXPORT void JNICALL
-Java_com_abw_converter_MainActivity_nativeUpdateProgress(JNIEnv* env, jobject, jfloat prog, jstring status, jstring logAppend) {
+Java_com_bw_converter_MainActivity_nativeUpdateProgress(JNIEnv* env, jobject, jfloat prog, jstring status, jstring logAppend) {
     std::lock_guard<std::mutex> lock(g_app.mtx);
     g_app.progresso = prog;
     if (status) {
@@ -409,7 +409,7 @@ Java_com_abw_converter_MainActivity_nativeUpdateProgress(JNIEnv* env, jobject, j
 }
 
 JNIEXPORT void JNICALL
-Java_com_abw_converter_MainActivity_nativeOnConvertFinished(JNIEnv*, jobject, jboolean success, jint totalConverted) {
+Java_com_bw_converter_MainActivity_nativeOnConvertFinished(JNIEnv*, jobject, jboolean success, jint totalConverted) {
     {
         std::lock_guard<std::mutex> lock(g_app.mtx);
         g_app.convertendo = false;
@@ -417,8 +417,8 @@ Java_com_abw_converter_MainActivity_nativeOnConvertFinished(JNIEnv*, jobject, jb
     }
     if (success) {
         std::string msg = g_app.isPtBr
-            ? ("Concluido! " + std::to_string(totalConverted) + " arquivo(s) em conv_abw/")
-            : ("Done! " + std::to_string(totalConverted) + " file(s) saved in conv_abw/");
+            ? ("Concluido! " + std::to_string(totalConverted) + " arquivo(s) em conv_bw/")
+            : ("Done! " + std::to_string(totalConverted) + " file(s) saved in conv_bw/");
         g_ui.Toast(msg, ShawarmaUI::Color(115, 224, 140), 3500);
     } else {
         g_ui.Toast(Tr("Conversao interrompida ou falhou.", "Conversion canceled or failed."),
