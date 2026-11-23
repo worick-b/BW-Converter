@@ -9,6 +9,7 @@ Lightweight, fast, and offline audio & video converter for Android powered by **
 
 - **Embedded FFmpeg 8.1:** With NEON optimizations & `libfdk_aac` (`aac_he_v2`) encoding.
 - **Embedded MKVMerge 57.0.0:** Remux a video to mkv without reencoding.
+- **UI Powered by:** `ShawarmaUI, A UI Sexy Model`.
 - **Batch or Single-File Mode:** Convert an entire folder at once or pick a single media file. Outputs are automatically organized into a `conv_abw` subfolder without overwriting originals.
 - **Custom FFmpeg Presets:** Create, edit, delete, restore defaults, or **Import / Export** your custom FFmpeg command presets via JSON.
 - **Special Character Safe:** Handles filenames with accents, spaces, and symbols cleanly without failing.
