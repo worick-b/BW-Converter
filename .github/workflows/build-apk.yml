@@ -17,7 +17,7 @@ jobs:
       - name: Baixar ShawarmaUI
         run: |
           rm -rf third_party/ShawarmaUI
-          git clone --depth 1 https://github.com third_party/ShawarmaUI
+          git clone --depth 1 https://github.com/xonev8/ShawarmaUI third_party/ShawarmaUI
 
       - name: Configurar Java 17
         uses: actions/setup-java@v4
@@ -57,6 +57,11 @@ jobs:
           chmod 755 app/src/main/jniLibs/*/*.so
           rm -rf tmp_bins
 
+      - name: Gerar Ícones Adaptativos do App (Pillow)
+        run: |
+          python3 -m pip install --quiet --break-system-packages pillow
+          python3 generate_icons.py
+
       - name: Garantir AndroidManifest.xml válido
         run: |
           python3 -c '
@@ -71,6 +76,8 @@ jobs:
               <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
               <application
                   android:allowBackup="true"
+                  android:icon="@mipmap/ic_launcher"
+                  android:roundIcon="@mipmap/ic_launcher_round"
                   android:label="ABetterWay Converter"
                   android:requestLegacyExternalStorage="true"
                   android:extractNativeLibs="true"
@@ -81,7 +88,7 @@ jobs:
                       android:windowSoftInputMode="adjustResize"
                       android:configChanges="orientation|screenSize|keyboardHidden">
                       <intent-filter>
-                          <action android:name="android.intent.category.MAIN" />
+                          <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
                   </activity>
