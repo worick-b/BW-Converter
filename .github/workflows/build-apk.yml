@@ -1,4 +1,4 @@
-name: Build Native Android APK (ABW Converter)
+name: Build Native Android APK (BW Converter)
 
 on:
   workflow_dispatch:
@@ -107,13 +107,13 @@ jobs:
       - name: Renomear APK Único
         run: |
           mkdir -p dist_apks
-          cp app/build/outputs/apk/release/*.apk dist_apks/abetterway-converter.apk
+          cp app/build/outputs/apk/release/*.apk dist_apks/betterway-converter.apk
 
       - name: Publicar APK nos Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ABW-Converter-APK
-          path: dist_apks/abetterway-converter.apk
+          name: BW-Converter-APK
+          path: dist_apks/betterway-converter.apk
 
       - name: Upload para Releases
         uses: softprops/action-gh-release@v2
@@ -122,5 +122,5 @@ jobs:
           name: ABetterWay Converter v2.1.0 (ShawarmaUI)
           body: |
             APK universal (`arm64-v8a` + `armeabi-v7a`) do **ABetterWay Converter** com interface nativa em C++ (**ShawarmaUI + OpenGL ES 3.0**), **FFmpeg 8.1** e **MKVToolNix 57.0.0** embutidos:
-            - `abetterway-converter.apk`
-          files: dist_apks/abetterway-converter.apk
+            - `betterway-converter.apk`
+          files: dist_apks/betterway-converter.apk
