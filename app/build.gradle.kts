@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.abw.converter"
+    namespace = "com.bw.converter"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.abw.converter"
+        applicationId = "com.bw.converter"
         minSdk = 28
         targetSdk = 35
         versionCode = 2
-        versionName = "2.1-ShawarmaUI"
+        versionName = "2.1"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
