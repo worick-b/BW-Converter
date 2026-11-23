@@ -56,7 +56,7 @@ static jmethodID g_midSavePrefs = nullptr;
 
 static void AplicarTemaPorIndice(int idx) {
     g_app.temaIdx = ((idx % 4) + 4) % 4;
-    if (g_app.temaIdx == 0) g_ui.ApplyTheme(ShawarmaUI::Theme::ShawarmaGold);
+    if (g_app.temaIdx == 0) g_ui.ApplyTheme(ShawarmaUI::Theme::ShawarmaRoseGold);
     else if (g_app.temaIdx == 1) g_ui.ApplyTheme(ShawarmaUI::Theme::NeonRed);
     else if (g_app.temaIdx == 2) g_ui.ApplyTheme(ShawarmaUI::Theme::CyberPurple);
     else g_ui.ApplyTheme(ShawarmaUI::Theme::LightClean);
