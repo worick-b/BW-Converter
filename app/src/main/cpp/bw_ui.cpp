@@ -56,9 +56,9 @@ static jmethodID g_midSavePrefs = nullptr;
 
 static void AplicarTemaPorIndice(int idx) {
     g_app.temaIdx = ((idx % 4) + 4) % 4;
-    if (g_app.temaIdx == 0) g_ui.ApplyTheme(ShawarmaUI::Theme::ShawarmaRoseGold);
-    else if (g_app.temaIdx == 1) g_ui.ApplyTheme(ShawarmaUI::Theme::NeonRed);
-    else if (g_app.temaIdx == 2) g_ui.ApplyTheme(ShawarmaUI::Theme::CyberPurple);
+    if (g_app.temaIdx == 0) g_ui.ApplyTheme(ShawarmaUI::Theme::NeonRed);
+    else if (g_app.temaIdx == 1) g_ui.ApplyTheme(ShawarmaUI::Theme::CyberPurple);
+    else if (g_app.temaIdx == 2) g_ui.ApplyTheme(ShawarmaUI::Theme::RoseGold);
     else g_ui.ApplyTheme(ShawarmaUI::Theme::LightClean);
 }
 
@@ -268,17 +268,21 @@ static void RenderBetterWayUI() {
     }
 
     bool isLight = (g_app.temaIdx == 3);
-    ShawarmaUI::Color goldTitle      = isLight ? ShawarmaUI::Color(30, 90, 190)   : ShawarmaUI::Color(232, 142, 122);
-    ShawarmaUI::Color greenOk        = isLight ? ShawarmaUI::Color(25, 145, 75)   : ShawarmaUI::Color(115, 224, 140);
+    ShawarmaUI::Color goldTitle = (g_app.temaIdx == 0) ? ShawarmaUI::Color(255, 75, 105) :   // Red
+                                  (g_app.temaIdx == 1) ? ShawarmaUI::Color(195, 125, 245) :  // Cyber
+                                  (g_app.temaIdx == 2) ? ShawarmaUI::Color(232, 142, 122) :  // Rose
+                                                         ShawarmaUI::Color(30, 88, 185);     // Ice (Claro suave)
+
+    ShawarmaUI::Color greenOk        = isLight ? ShawarmaUI::Color(22, 138, 70)   : ShawarmaUI::Color(115, 224, 140);
     ShawarmaUI::Color redDanger(196, 54, 44);
     ShawarmaUI::Color redDangerHover(222, 68, 56);
-    ShawarmaUI::Color neutralBtn     = isLight ? ShawarmaUI::Color(208, 216, 230) : ShawarmaUI::Color(44, 42, 48);
-    ShawarmaUI::Color neutralHover   = isLight ? ShawarmaUI::Color(192, 204, 224) : ShawarmaUI::Color(58, 55, 64);
+    ShawarmaUI::Color neutralBtn     = isLight ? ShawarmaUI::Color(188, 202, 222) : ShawarmaUI::Color(44, 42, 48);
+    ShawarmaUI::Color neutralHover   = isLight ? ShawarmaUI::Color(172, 188, 212) : ShawarmaUI::Color(58, 55, 64);    
 
     // Cabeçalho com título BetterWay Converter, botão de Tema e botão EN / PT-BR
     g_ui.AlignText().Text("BetterWay Converter", true);
 
-    static const char* kThemeNames[] = { "Rose", "Red", "Cyber", "Light" };
+    static const char* kThemeNames[] = { "Red", "Cyber", "Rose", "Ice" };
     g_ui.SameLineRight(136);
     if (g_ui.Button(kThemeNames[g_app.temaIdx], 66, 30, neutralBtn, neutralHover)) {
         AplicarTemaPorIndice(g_app.temaIdx + 1);
