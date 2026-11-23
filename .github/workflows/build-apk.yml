@@ -3,22 +3,23 @@ name: Build Native Android APK (ABW Converter)
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout do repositório
+      - name: Checkout do repositório principal
+        uses: actions/checkout@v4
+
+      - name: Baixar ShawarmaUI
         uses: actions/checkout@v4
         with:
-          submodules: recursive
-
-      - name: Garantir ShawarmaUI em third_party/ShawarmaUI
-        run: |
-          if [ ! -f "third_party/ShawarmaUI/include/ShawarmaUI_Android.h" ]; then
-            rm -rf third_party/ShawarmaUI
-            git clone --depth 1 https://github.com/xonev8/ShawarmaUI third_party/ShawarmaUI
-          fi
+          repository: xonev8/ShawarmaUI
+          path: third_party/ShawarmaUI
+          clean: false
 
       - name: Configurar Java 17
         uses: actions/setup-java@v4
@@ -89,7 +90,7 @@ jobs:
                       android:windowSoftInputMode="adjustResize"
                       android:configChanges="orientation|screenSize|keyboardHidden">
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
+                          <action android:name="android.intent.category.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
                       </intent-filter>
                   </activity>
