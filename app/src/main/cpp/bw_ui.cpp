@@ -267,12 +267,13 @@ static void RenderBetterWayUI() {
         logCopy = g_app.logSaida;
     }
 
-    ShawarmaUI::Color goldTitle(232, 176, 56);
-    ShawarmaUI::Color greenOk(115, 224, 140);
+    bool isLight = (g_app.temaIdx == 3);
+    ShawarmaUI::Color goldTitle      = isLight ? ShawarmaUI::Color(30, 90, 190)   : ShawarmaUI::Color(232, 176, 56);
+    ShawarmaUI::Color greenOk        = isLight ? ShawarmaUI::Color(25, 145, 75)   : ShawarmaUI::Color(115, 224, 140);
     ShawarmaUI::Color redDanger(196, 54, 44);
     ShawarmaUI::Color redDangerHover(222, 68, 56);
-    ShawarmaUI::Color neutralBtn(52, 47, 44);
-    ShawarmaUI::Color neutralHover(68, 61, 57);
+    ShawarmaUI::Color neutralBtn     = isLight ? ShawarmaUI::Color(208, 216, 230) : ShawarmaUI::Color(52, 47, 44);
+    ShawarmaUI::Color neutralHover   = isLight ? ShawarmaUI::Color(192, 204, 224) : ShawarmaUI::Color(68, 61, 57);
 
     // Cabeçalho com título BetterWay Converter, botão de Tema e botão EN / PT-BR
     g_ui.AlignText().Text("BetterWay Converter", true);
