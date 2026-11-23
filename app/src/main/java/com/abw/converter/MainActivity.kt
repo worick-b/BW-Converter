@@ -30,6 +30,8 @@ class MainActivity : Activity() {
         init { System.loadLibrary("bw_ui") }
         private const val REQ_PICK_FILE = 1001
         private const val REQ_PICK_FOLDER = 1002
+        private const val REQ_IMPORT_JSON = 1003
+        private const val REQ_EXPORT_JSON = 1004
     }
 
     private external fun nativeInit(density: Float, isPtBr: Boolean)
@@ -39,6 +41,8 @@ class MainActivity : Activity() {
     private external fun nativeTextCommit(text: String)
     private external fun nativeKeySpecial(code: Int)
 
+    private external fun nativeLoadPresetsJson(jsonStr: String, showToast: Boolean)
+    private external fun nativeNotifyToast(msg: String, isError: Boolean)
     private external fun nativeSetSelectedPath(path: String)
     private external fun nativeUpdateProgress(prog: Float, status: String, logAppend: String)
     private external fun nativeOnConvertFinished(success: Boolean, totalConverted: Int)
@@ -49,6 +53,7 @@ class MainActivity : Activity() {
 
     private val cancelFlag = AtomicBoolean(false)
     @Volatile private var currentProcess: Process? = null
+    private var pendingExportJson: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,8 +105,7 @@ class MainActivity : Activity() {
         runOnUiThread {
             ensureAllFilesPermission()
             if (isFolder) {
-                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-                startActivityForResult(intent, REQ_PICK_FOLDER)
+                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQ_PICK_FOLDER)
             } else {
                 val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
@@ -112,13 +116,59 @@ class MainActivity : Activity() {
         }
     }
 
+    fun savePresetsJsonFromNative(jsonStr: String) {
+        try {
+            File(filesDir, "presets.json").writeText(jsonStr, Charsets.UTF_8)
+        } catch (_: Exception) {}
+    }
+
+    fun importPresetsFromNative() {
+        runOnUiThread {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*"
+            }
+            startActivityForResult(intent, REQ_IMPORT_JSON)
+        }
+    }
+
+    fun exportPresetsFromNative(jsonStr: String) {
+        pendingExportJson = jsonStr
+        runOnUiThread {
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "application/json"
+                putExtra(Intent.EXTRA_TITLE, "betterway_presets.json")
+            }
+            startActivityForResult(intent, REQ_EXPORT_JSON)
+        }
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode != RESULT_OK || data?.data == null) return
         val uri = data.data!!
 
-        val resolved = resolveRealPath(uri) ?: return
-        glView.queueEvent { nativeSetSelectedPath(resolved) }
+        if (requestCode == REQ_PICK_FILE || requestCode == REQ_PICK_FOLDER) {
+            val resolved = resolveRealPath(uri) ?: return
+            glView.queueEvent { nativeSetSelectedPath(resolved) }
+        } else if (requestCode == REQ_IMPORT_JSON) {
+            try {
+                val content = contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: return
+                glView.queueEvent { nativeLoadPresetsJson(content, true) }
+            } catch (_: Exception) {
+                glView.queueEvent { nativeNotifyToast("Falha ao ler JSON.", true) }
+            }
+        } else if (requestCode == REQ_EXPORT_JSON) {
+            try {
+                contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(pendingExportJson.toByteArray(Charsets.UTF_8))
+                }
+                glView.queueEvent { nativeNotifyToast("Presets exportados!", false) }
+            } catch (_: Exception) {
+                glView.queueEvent { nativeNotifyToast("Falha ao exportar JSON.", true) }
+            }
+        }
     }
 
     private fun resolveRealPath(uri: Uri): String? {
@@ -210,10 +260,6 @@ class MainActivity : Activity() {
         try { currentProcess?.destroyForcibly() } catch (_: Exception) {}
     }
 
-    fun savePresetsFromNative() {
-        // Gancho opcional para persistir JSON em filesDir
-    }
-
     private fun collectMediaFiles(target: File, isBatch: Boolean): List<File> {
         val validExts = setOf("mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "mp3", "aac", "ogg", "opus", "flac", "wav", "m4a", "wma")
         if (!isBatch) {
@@ -239,6 +285,14 @@ class MainActivity : Activity() {
         override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
             val isPt = Locale.getDefault().language.startsWith("pt", ignoreCase = true)
             nativeInit(resources.displayMetrics.density, isPt)
+
+            val savedFile = File(filesDir, "presets.json")
+            if (savedFile.exists()) {
+                try {
+                    val json = savedFile.readText(Charsets.UTF_8)
+                    nativeLoadPresetsJson(json, false)
+                } catch (_: Exception) {}
+            }
         }
 
         override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
