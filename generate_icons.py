@@ -66,7 +66,7 @@ def gerar_todos_icones():
     bg_master = Image.new("RGBA", (1024, 1024), BG_COLOR)
     full_master = Image.alpha_composite(bg_master, fg_master)
 
-    # 1. Ícones padrão e redondos (48dp base)
+    # 1. Ícones padrão e redondos (mipmap-*)
     densidades_launcher = {
         "mipmap-mdpi": 48,
         "mipmap-hdpi": 72,
@@ -81,13 +81,13 @@ def gerar_todos_icones():
         icone.save(d / "ic_launcher.png", "PNG")
         icone.save(d / "ic_launcher_round.png", "PNG")
 
-    # 2. Camadas de Ícone Adaptativo Android 8+ (108dp base)
+    # 2. Camadas de Ícone Adaptativo Android 8+ (drawable-*)
     densidades_adaptativas = {
-        "mipmap-mdpi": 108,
-        "mipmap-hdpi": 162,
-        "mipmap-xhdpi": 216,
-        "mipmap-xxhdpi": 324,
-        "mipmap-xxxhdpi": 432,
+        "drawable-mdpi": 108,
+        "drawable-hdpi": 162,
+        "drawable-xhdpi": 216,
+        "drawable-xxhdpi": 324,
+        "drawable-xxxhdpi": 432,
     }
     for pasta, px in densidades_adaptativas.items():
         d = res_dir / pasta
@@ -95,14 +95,14 @@ def gerar_todos_icones():
         bg_master.resize((px, px), Image.Resampling.LANCZOS).save(d / "ic_launcher_background.png", "PNG")
         fg_master.resize((px, px), Image.Resampling.LANCZOS).save(d / "ic_launcher_foreground.png", "PNG")
 
-    # 3. XMLs adaptativos (mipmap-anydpi-v26)
+    # 3. XMLs adaptativos (mipmap-anydpi-v26) apontando para @drawable/*
     anydpi = res_dir / "mipmap-anydpi-v26"
     anydpi.mkdir(parents=True, exist_ok=True)
     ns = bytes.fromhex("687474703a2f2f736368656d61732e616e64726f69642e636f6d2f61706b2f7265732f616e64726f6964").decode()
     xml_adaptativo = f"""<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="{ns}">
-    <background android:drawable="@mipmap/ic_launcher_background" />
-    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
 </adaptive-icon>
 """
     (anydpi / "ic_launcher.xml").write_text(xml_adaptativo, encoding="utf-8")
