@@ -202,6 +202,18 @@ class MainActivity : Activity() {
             val nativeDir = applicationInfo.nativeLibraryDir
             val binPath = if (motorIdx == 0) "$nativeDir/libffmpeg_bin.so" else "$nativeDir/libmkvmerge_bin.so"
             var converted = 0
+            val totalFiles = files.size.toFloat()
+
+            val rxDuration = Regex("""Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)""")
+            val rxTime = Regex("""time=(\d+):(\d+):(\d+(?:\.\d+)?)""")
+            val rxMkvProg = Regex("""Progress:\s*(\d+)%""")
+
+            fun parseSeconds(m: MatchResult): Double {
+                val h = m.groupValues[1].toDoubleOrNull() ?: 0.0
+                val min = m.groupValues[2].toDoubleOrNull() ?: 0.0
+                val sec = m.groupValues[3].toDoubleOrNull() ?: 0.0
+                return h * 3600.0 + min * 60.0 + sec
+            }
 
             for ((index, inputFile) in files.withIndex()) {
                 if (cancelFlag.get()) break
@@ -220,33 +232,76 @@ class MainActivity : Activity() {
                     cmd.addAll(listOf("-o", outFile.absolutePath, inputFile.absolutePath))
                 }
 
-                val baseProg = index.toFloat() / files.size.toFloat()
                 val statusMsg = "[${index + 1}/${files.size}] ${inputFile.name}"
-                glView.queueEvent { nativeUpdateProgress(baseProg, statusMsg, "\n> ${cmd.joinToString(" ")}\n") }
+                val startProg = index.toFloat() / totalFiles
+                glView.queueEvent { nativeUpdateProgress(startProg, statusMsg, "$statusMsg ... ") }
+
+                var durationSec = 0.0
+                var lastSentPct = -1
 
                 try {
                     val pb = ProcessBuilder(cmd).redirectErrorStream(true)
                     val proc = pb.start()
                     currentProcess = proc
 
-                    BufferedReader(InputStreamReader(proc.inputStream)).use { reader ->
-                        var line: String?
-                        while (reader.readLine().also { line = it } != null) {
-                            if (cancelFlag.get()) {
-                                proc.destroyForcibly()
-                                break
+                    // FFmpeg usa '\r' para atualizar progresso na mesma linha; lemos caractere a caractere por linha/\r
+                    val reader = InputStreamReader(proc.inputStream, Charsets.UTF_8)
+                    val sb = StringBuilder()
+                    var chInt: Int
+                    while (reader.read().also { chInt = it } != -1) {
+                        if (cancelFlag.get()) {
+                            proc.destroyForcibly()
+                            break
+                        }
+                        val c = chInt.toChar()
+                        if (c == '\n' || c == '\r') {
+                            if (sb.isNotEmpty()) {
+                                val line = sb.toString()
+                                sb.setLength(0)
+
+                                var fileRatio = -1f
+                                if (motorIdx == 0) {
+                                    if (durationSec <= 0.0) {
+                                        rxDuration.find(line)?.let { durationSec = parseSeconds(it) }
+                                    }
+                                    if (durationSec > 0.0) {
+                                        rxTime.find(line)?.let { m ->
+                                            val curSec = parseSeconds(m)
+                                            fileRatio = (curSec / durationSec).toFloat().coerceIn(0f, 1f)
+                                        }
+                                    }
+                                } else {
+                                    rxMkvProg.find(line)?.let { m ->
+                                        val pInt = m.groupValues[1].toIntOrNull() ?: 0
+                                        fileRatio = (pInt / 100f).coerceIn(0f, 1f)
+                                    }
+                                }
+
+                                if (fileRatio >= 0f) {
+                                    val globalProg = ((index.toFloat() + fileRatio) / totalFiles).coerceIn(0f, 1f)
+                                    val pctInt = (globalProg * 100f).toInt()
+                                    if (pctInt != lastSentPct) {
+                                        lastSentPct = pctInt
+                                        glView.queueEvent { nativeUpdateProgress(globalProg, statusMsg, "") }
+                                    }
+                                }
                             }
-                            val logLine = "$line\n"
-                            glView.queueEvent { nativeUpdateProgress(baseProg, statusMsg, logLine) }
+                        } else {
+                            sb.append(c)
                         }
                     }
 
                     val code = proc.waitFor()
                     currentProcess = null
-                    if (code == 0 && !cancelFlag.get()) converted++
-                } catch (e: Exception) {
-                    val err = "Erro: ${e.message}\n"
-                    glView.queueEvent { nativeUpdateProgress(baseProg, statusMsg, err) }
+                    if (code == 0 && !cancelFlag.get()) {
+                        converted++
+                        val doneProg = (index + 1).toFloat() / totalFiles
+                        glView.queueEvent { nativeUpdateProgress(doneProg, statusMsg, "OK\n") }
+                    } else if (!cancelFlag.get()) {
+                        glView.queueEvent { nativeUpdateProgress(startProg, statusMsg, "ERRO\n") }
+                    }
+                } catch (_: Exception) {
+                    glView.queueEvent { nativeUpdateProgress(startProg, statusMsg, "ERRO\n") }
                 }
             }
 
