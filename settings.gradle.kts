@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "BW-Converter"
+rootProject.name = "WorickB-Converter"
 include(":app")
