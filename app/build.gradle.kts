@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.bw.converter"
+    namespace = "com.worickb.converter"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.bw.converter"
+        applicationId = "com.worickb.converter"
         minSdk = 28
         targetSdk = 35
         versionCode = 2
@@ -20,7 +20,7 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags += listOf("-std=c++17", "-O3", "-fvisibility=hidden")
+                cppFlags += listOf("-std=c++17", "-Os", "-fvisibility=hidden")
             }
         }
     }
@@ -60,5 +60,5 @@ android {
 }
 
 dependencies {
-    // 100% ShawarmaUI + OpenGL ES 3.0 (Zero Material3 / Compose)
+    // 100% ShawarmaUI + NanoVG + OpenGL ES 3.0 (Zero Material3 / Compose)
 }
