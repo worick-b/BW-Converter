@@ -1,4 +1,4 @@
-package com.bw.converter
+package com.worickb.converter
 
 import android.app.Activity
 import android.content.Context
@@ -26,7 +26,7 @@ import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
     companion object {
-        init { System.loadLibrary("bw_ui") }
+        init { System.loadLibrary("worickb_ui") }
         private const val REQ_PICK_FILE = 1001
         private const val REQ_PICK_FOLDER = 1002
         private const val REQ_IMPORT_JSON = 1003
@@ -135,7 +135,7 @@ class MainActivity : Activity() {
     }
 
     fun savePrefsFromNative(isPtBr: Boolean, themeIdx: Int) {
-        getSharedPreferences("bw_prefs", Context.MODE_PRIVATE)
+        getSharedPreferences("worickb_prefs", Context.MODE_PRIVATE)
             .edit()
             .putBoolean("is_pt_br", isPtBr)
             .putInt("theme_idx", themeIdx)
@@ -158,7 +158,7 @@ class MainActivity : Activity() {
             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
                 type = "application/json"
-                putExtra(Intent.EXTRA_TITLE, "betterway_presets.json")
+                putExtra(Intent.EXTRA_TITLE, "wb-converter_presets.json")
             }
             startActivityForResult(intent, REQ_EXPORT_JSON)
         }
@@ -238,7 +238,7 @@ class MainActivity : Activity() {
             for ((index, inputFile) in files.withIndex()) {
                 if (cancelFlag.get()) break
 
-                val outDir = File(inputFile.parentFile, "conv_bw").apply { mkdirs() }
+                val outDir = File(inputFile.parentFile, "conv_worickb").apply { mkdirs() }
                 val outExt = if (motorIdx == 0) ext else ".mkv"
                 val outFile = File(outDir, "${inputFile.nameWithoutExtension}$outExt")
 
@@ -381,7 +381,7 @@ class MainActivity : Activity() {
         }
 
         override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
-            val prefs = getSharedPreferences("bw_prefs", Context.MODE_PRIVATE)
+            val prefs = getSharedPreferences("worickb_prefs", Context.MODE_PRIVATE)
             val defaultPt = Locale.getDefault().language.startsWith("pt", ignoreCase = true)
             val isPt = prefs.getBoolean("is_pt_br", defaultPt)
             val savedTheme = prefs.getInt("theme_idx", 0)
