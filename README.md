@@ -1,4 +1,4 @@
-# BetterWay Converter
+# Worick B. Converter
 ~Thunderstruck
 
 Lightweight, fast, and offline audio & video converter for Android powered by **FFmpeg** & **MKVToolNix**.
